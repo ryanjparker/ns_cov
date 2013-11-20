@@ -1,6 +1,6 @@
 # estimate parameters in NS models
 
-"ns_estimate_range" <- function(lambda, y, S, R, Rn, B, Bn) {
+"ns_estimate_range" <- function(lambda, y, S, R, Rn, B, Bn, D, D2, init.phi, verbose=FALSE) {
 	# estimates range parameters with penalty lambda
 	# y: observed data
 	# S: spatial locations
@@ -18,15 +18,22 @@
 	n      <- length(y)
 	points <- sample(n, min(n,1000))
 	d      <- dist(S[points,])
-	phi    <- as.vector( rep(quantile(d,0.1), Nr) )
-	#phi <- rep(50, Nr)
+	if (missing(init.phi)) {
+		phi <- as.vector( rep(quantile(d,0.1), Nr) )
+	} else {
+		phi <- init.phi
+	}
 	lphi <- log(phi)
 
-	D  <- rdist(S)
-	D2 <- rdist(S[,1])^2 + rdist(S[,2])^2
+	if (missing(D)) {
+		D  <- rdist(S)
+		diag(D)  <- 0
+	}
 
-	diag(D)  <- 0
-	diag(D2) <- 0
+	if (missing(D2)) {
+		D2 <- rdist(S[,1])^2 + rdist(S[,2])^2
+		diag(D2) <- 0
+	}
 
 	# things for estimation
 	nH <- Nr*(Nr+1)/2
@@ -175,6 +182,9 @@ done
 
 	"loglik" <- function(phi) {
 		ll <- sum( apply(Bn, 1, function(row) {
+			in.b1 <- sum(B==row[1])
+			in.b2 <- sum(B==row[2])
+
 			in.pair <- which(B==row[1] | B==row[2])
 			n.pair <- length(in.pair)
 
@@ -212,12 +222,14 @@ done
 		ll <- loglik(phi)
 		pll <- ll -penalty(lphi)
 
+		if (verbose) {
 			cat(
 				paste0("iter=",iter,
 					" ; pll: ",round(pll,2),
 					" ; phi: ",paste(round(phi,2),collapse=" ")
 				),
 			"\n")
+		}
 
 		# have we converged?
 #		max_diff <- max( c(
@@ -226,7 +238,7 @@ done
 #		if ( max_diff <= tol ) {
 
 		if (abs(pll - prev.pll)/(0.1 + abs(pll)) <= tol) {
-			cat("Converged at iteration",iter,"\n")
+			if (verbose) cat("Converged at iteration",iter,"\n")
 			break
 		}
 	}
