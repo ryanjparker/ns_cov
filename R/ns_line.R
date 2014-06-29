@@ -13,7 +13,7 @@ n <- nrow(S)
 # make range decay from east to west
 phi <- 0.01 + (1-S[,1])*0.49
 
-if (F) { # plot range
+if (FALSE) { # plot range
 	cat("range plot\n")
 	pdf("pdf/ns_line_phi.pdf")
 		image.plot(matrix(phi,nrow=sqrt(n)),zlim=c(0.01,0.56))
@@ -21,7 +21,7 @@ if (F) { # plot range
 done
 }
 
-if (F) { # generate data
+if (FALSE) { # generate data
 	cat("data gen\n")
 	Sigma <- full_ns_cov(phi=phi, n=n, S=S)
 	set.seed(311)
@@ -35,7 +35,7 @@ Nr <- length(unique(gridR$B))
 gridB <- create_blocks(S, 5^2)
 Nb <- length(unique(gridB$B))
 
-if (F) { # plot data
+if (FALSE) { # plot data
 	cat("plot\n")
 	pdf("pdf/ns_line_data.pdf")
 		image.plot(matrix(y,nrow=sqrt(n)), zlim=c(-max(abs(y)),max(abs(y))) )
@@ -45,7 +45,7 @@ if (F) { # plot data
 done
 }
 
-if (F) { # plot corr for site
+if (FALSE) { # plot corr for site
 	cat("plot corr\n")
 	pdf("pdf/ns_line_corr1.pdf")
 		image.plot(matrix(Sigma[456,],nrow=sqrt(n)), zlim=c(0,1))
@@ -76,7 +76,7 @@ if (T) { # fit for single lambda and region
 done
 }
 
-if (F) { # predict on a holdout set
+if (FALSE) { # predict on a holdout set
 	set.seed(1983)
 	#in.h <- round(seq(1, n, len=round(0.1*n)))
 
@@ -128,7 +128,7 @@ if (F) { # predict on a holdout set
 
 }
 
-if (F) { # run CV for a lambda
+if (FALSE) { # run CV for a lambda
 	set.seed(1983)
 	nfolds <- 5
 	ids <- split(sample(n,n), 1:nfolds)
@@ -151,7 +151,7 @@ if (F) { # run CV for a lambda
 
 }
 
-if (F) { # fit over a grid of lambdas
+if (FALSE) { # fit over a grid of lambdas
 	lambdas <- 1 #c(3,2,1.75,1.5) #c(1.25,0.9) #c(0.75,0.5,0.25) #c(1,10,50,100) #seq(0.01,15,len=10)
 	for (lambda in lambdas) {
 		fit <- ns_estimate_range(lambda=lambda, y=y, S=S, R=gridR$B, Rn=gridR$neighbors, B=gridB$B, Bn=gridB$neighbors)

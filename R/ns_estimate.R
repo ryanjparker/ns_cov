@@ -1,6 +1,6 @@
 # estimate parameters in NS models
 
-"ns_estimate_range" <- function(lambda, y, S, R, Rn, B, Bn, D, D2, init.phi, verbose=FALSE) {
+"ns_estimate_range" <- cmpfun( function(lambda, y, S, R, Rn, B, Bn, D, D2, init.phi, verbose=FALSE) {
 	# estimates range parameters with penalty lambda
 	# y: observed data
 	# S: spatial locations
@@ -8,6 +8,8 @@
 	# Rn: subregion neighbors
 	# B: block memberships
 	# Bn: block neighbors
+
+	alpha <- 1
 
 	# number of subregions
 	Nr <- length(unique(R))
@@ -112,7 +114,7 @@ done
 			n.pair <- length(in.pair)
 
 			#Sigma <- compute_cov(cov, t_theta(theta), D[in.pair,in.pair])
-			Sigma <- fast_ns_cov(phi=phi, n=n.pair, Nr=Nr, R=R[in.pair], D2=D2[in.pair,in.pair])
+			Sigma <- kn*diag(n.pair) + ks*fast_ns_cov(phi=phi, n=n.pair, Nr=Nr, R=R[in.pair], D2=D2[in.pair,in.pair])
 			invSigma <- chol2inv(chol(Sigma))
 			q <- invSigma %*% y[in.pair]
 
@@ -175,7 +177,11 @@ done
 			})
 		})
 
-		lphi <- lphi + chol2inv(chol(FI)) %*% u
+		# cap change at 1 since we're on log scale
+		change <- chol2inv(chol(FI)) %*% u
+		change <- ifelse(abs(change) >= 1, sign(change)*1, change)
+
+		lphi <- lphi + alpha*change
 
 		lphi
 	}
@@ -188,7 +194,7 @@ done
 			in.pair <- which(B==row[1] | B==row[2])
 			n.pair <- length(in.pair)
 
-			Sigma <- fast_ns_cov(phi=phi, n=n.pair, Nr=Nr, R=R[in.pair], D2=D2[in.pair,in.pair])
+			Sigma <- kn*diag(n.pair) + ks*fast_ns_cov(phi=phi, n=n.pair, Nr=Nr, R=R[in.pair], D2=D2[in.pair,in.pair])
 			cholSigma <- chol(Sigma)
 			invSigma <- chol2inv(cholSigma)
 
@@ -204,8 +210,8 @@ done
 		}
 	}
 
-	maxIter <- 100
-	tol <- 1e-4
+	maxIter <- 20
+	tol <- 1e-6
 	ll <- loglik(phi)
 	pll <- ll -penalty(lphi)
 
@@ -241,6 +247,11 @@ done
 			if (verbose) cat("Converged at iteration",iter,"\n")
 			break
 		}
+
+		if (pll < prev.pll) {
+			# reduce stepsize
+			alpha <- alpha/2
+		}
 	}
 
 	convergence <- TRUE
@@ -253,7 +264,7 @@ done
 		conv=as.integer(convergence),
 		phi=as.vector(phi), ll=ll, pll=pll
 	)
-}
+} ) # cmpfun
 
 "ns_local_pred" <- function(y, phi, Sfit, Snew, Rfit, Rnew, D, D2) {
 	nFit <- nrow(Sfit)
@@ -329,42 +340,50 @@ done
 	y_0
 }
 
-"ns_full_pred" <- function(y, phi, Sfit, Snew, Rfit, Rnew, D2) {
+"ns_full_pred" <- function(y, phi, Sfit, Snew, Rfit, Rnew, D2, Sigma) {
 	nFit <- nrow(Sfit)
 	nNew <- nrow(Snew)
 	n <- nFit+nNew
 	Nr <- length(phi)
 	R <- c(Rfit,Rnew)
 
-	if (missing(D2)) {
-		D2 <- rdist( rbind(Sfit,Snew)[,1] )^2 + rdist( rbind(Sfit,Snew)[,2] )^2
-		diag(D2) <- 0
-	}
+	if (missing(Sigma)) {
+		if (missing(D2)) {
+			D2 <- rdist( rbind(Sfit,Snew)[,1] )^2 + rdist( rbind(Sfit,Snew)[,2] )^2
+			diag(D2) <- 0
+		}
 
-	# compute covariance matrix
-	Sigma <- fast_ns_cov(phi=phi, n=nFit+nNew, Nr=Nr, R=R, D2=D2)
+		# compute covariance matrix
+		Sigma <- kn*diag(nFit+nNew) + ks*fast_ns_cov(phi=phi, n=nFit+nNew, Nr=Nr, R=R, D2=D2)
+	}
 
 	# get the predictions
 	y_0 <- Sigma[nFit+1:nNew,1:nFit] %*% chol2inv(chol(Sigma[1:nFit,1:nFit])) %*% y
 
-	y_0
+	invSigma <- chol2inv(chol(Sigma))
+
+	sd.pred <- sqrt(diag( chol2inv(chol( invSigma[nFit+1:nNew,nFit+1:nNew] )) ))
+
+	list(y=as.vector(y_0), sd=as.vector(sd.pred))
 }
 
 # conditional log-likelihood
-"ns_cond_ll" <- function(yfit, ynew, phi, Sfit, Snew, Rfit, Rnew, D2) {
+"ns_cond_ll" <- function(yfit, ynew, phi, Sfit, Snew, Rfit, Rnew, D2, Sigma) {
 	nFit <- nrow(Sfit)
 	nNew <- nrow(Snew)
 	n <- nFit+nNew
 	Nr <- length(phi)
 	R <- c(Rfit,Rnew)
 
-	if (missing(D2)) {
-		D2 <- rdist( rbind(Sfit,Snew)[,1] )^2 + rdist( rbind(Sfit,Snew)[,2] )^2
-		diag(D2) <- 0
-	}
+	if (missing(Sigma)) {
+		if (missing(D2)) {
+			D2 <- rdist( rbind(Sfit,Snew)[,1] )^2 + rdist( rbind(Sfit,Snew)[,2] )^2
+			diag(D2) <- 0
+		}
 
-	# compute covariance matrix
-	Sigma <- fast_ns_cov(phi=phi, n=nFit+nNew, Nr=Nr, R=R, D2=D2)
+		# compute covariance matrix
+		Sigma <- kn*diag(nFit+nNew) + ks*fast_ns_cov(phi=phi, n=nFit+nNew, Nr=Nr, R=R, D2=D2)
+	}
 
 	C <- Sigma[nFit+1:nNew,1:nFit] %*% chol2inv(chol(Sigma[1:nFit,1:nFit]))
 

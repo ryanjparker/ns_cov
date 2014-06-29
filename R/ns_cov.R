@@ -4,10 +4,9 @@ library(compiler)
 # for each site having a different range
 "full_ns_cov" <- cmpfun( function(phi, n, S) {
 	# Sigmas for each site
-	Sigmas <- vector("list", n)
-	for (i in 1:n) {
-		Sigmas[[i]] <- diag(phi[i]^2, 2)
-	}
+	#Sigmas <- vector("list", n)
+	#for (i in 1:n) { Sigmas[[i]] <- diag(phi[i]^2, 2) }
+	phi2 <- phi^2
 
 	# det(Sigmas) for each site
 	detSigmas <- rep(NA, n)
@@ -16,28 +15,40 @@ library(compiler)
 	}
 
 	Sigma  <- matrix(NA, nrow=n, ncol=n)
-#	sapply(1:n, function(i) {
-#		sapply(i:n, function(j) {
 	diag(Sigma) <- 1
-	for (i in 1:(n-1)) {
-		for (j in (i+1):n) {
+	sapply(1:(n-1), function(i) {
+		sapply((i+1):n, function(j) {
+#	for (i in 1:(n-1)) {
+#		for (j in (i+1):n) {
 #			if (i == j) {
 #				Sigma[i,i] <- 1
 #			} else {
 				d <- S[i,]-S[j,]
 
+if (FALSE) {
 				cholMid <- chol( (Sigmas[[i]] + Sigmas[[j]])/2 )
 				detsL <- prod( diag( cholMid )^2 )
 				invsL <- chol2inv(cholMid)
 
 				D_ij <- sqrt( d[1]^2*invsL[1,1] + d[2]^2*invsL[2,2] + 2*d[1]*d[2]*invsL[1,2] )
 				Sigma[i,j] <- Sigma[j,i] <- detSigmas[i]^.25 * detSigmas[j]^.25 * detsL^(-.5) * exp(-D_ij)
+} else {
+				v    <- (phi2[i] + phi2[j])/2  # variance of combined kernel matrices
+				iv   <- 1/v                    # inverse
+				detv <- v^2                    # determinant
+
+				D_ij <- sqrt( iv*(d[1]^2 + d[2]^2) )
+				Sigma[i,j] <<- detSigmas[i]^.25 * detSigmas[j]^.25 * detv^(-.5) * exp(-D_ij)
+}
+
 #			}
 
-		}
-	}
-#		})
-#	})
+#		}
+#	}
+		})
+	})
+
+	Sigma[lower.tri(Sigma)] <- t(Sigma)[lower.tri(Sigma)]
 
 	Sigma
 } )
