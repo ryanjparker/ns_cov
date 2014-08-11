@@ -8,7 +8,7 @@ source("R/ns_cov.R")
 source("R/ns_estimate.R")
 
 kn <- 0.05
-ks <- 0.25
+ks <- 0.95
 
 # function to execte the simulation study based on given factors
 "sim_exp" <- function(design, factors, which.exp) {
@@ -20,7 +20,10 @@ ks <- 0.25
 	design$D <- rdist(design$S)
 	diag(design$D) <- 0
 
-	if (factors$data == "ns_discrete") {
+	if (factors$data == "ns_discrete"
+	    || factors$data == "ns_discrete_nugget"
+	    || factors$data == "ns_discrete_psill"
+	    || factors$data == "ns_discrete_range") {
 		# compute distance for discrete case
 		design$D2 <- rdist(design$S[,1])^2 + rdist(design$S[,2])^2
 
@@ -51,7 +54,7 @@ ks <- 0.25
 			res.s  <- eval.s(design, factors, data)
 
 			# ... non-stationary
-			res.ns <- eval.ns(design, factors, data, res.s$phi)
+			#res.ns <- eval.ns(design, factors, data, res.s$phi)
 
 			# ... kernel-convolutions
 			#res.kc <- eval.kc(design, factors, data)
@@ -61,10 +64,10 @@ ks <- 0.25
 			# oracle results
 			o.elapsed=res.o$elapsed, o.c_ll=res.o$c_ll, o.mse=res.o$mse, o.cov=res.o$cov, o.clen=res.o$clen,
 			# stationary results
-			s.success=res.s$success, s.elapsed=res.s$elapsed, s.c_ll=res.s$c_ll, s.mse=res.s$mse, s.cov=res.s$cov, s.clen=res.s$clen,
+			s.success=res.s$success, s.elapsed=res.s$elapsed, s.c_ll=res.s$c_ll, s.mse=res.s$mse, s.cov=res.s$cov, s.clen=res.s$clen#,
 			# non-stationary results
-			ns.success=res.ns$success, ns.elapsed=res.ns$elapsed, ns.c_ll=res.ns$c_ll, ns.mse=res.ns$mse, ns.cov=res.ns$cov, ns.clen=res.ns$clen,
-			ns.lambda=res.ns$lambda
+			#ns.success=res.ns$success, ns.elapsed=res.ns$elapsed, ns.c_ll=res.ns$c_ll, ns.mse=res.ns$mse, ns.cov=res.ns$cov, ns.clen=res.ns$clen,
+			#ns.lambda=res.ns$lambda
     )
 #print(round(unlist(r),3))
 print(unlist(r))
@@ -89,8 +92,17 @@ print(unlist(r))
 		data$phi <- 0.15
 		Sigma <- kn*diag(factors$n) + ks*exp(-design$D/data$phi)
 	} else if (factors$data == "ns_discrete") {
-		data$phi <- c(0.01, 0.03, 0.05, 0.07)
-		Sigma <- kn*diag(factors$n) + ks*fast_ns_cov(data$phi, factors$n, length(data$phi), design$d_gridR$B, design$S, design$D2)
+		#data$phi <- c(0.01, 0.03, 0.05, 0.07)
+		data$phi <- c(0.01, 0.10, 0.10, 0.20)
+		#Sigma <- kn*diag(factors$n) + ks*fast_ns_cov(data$phi, factors$n, length(data$phi), design$d_gridR$B, design$S, design$D2)
+		Sigma <- calc_ns_cov(tau=kn, sigma=sqrt(ks), phi=data$phi, Nr=length(data$phi), R=design$d_gridR$B, S=design$S, D2=design$D2)
+	} else if (factors$data == "ns_discrete_nugget") {
+stop("todo")
+	} else if (factors$data == "ns_discrete_psill") {
+stop("todo")
+	} else if (factors$data == "ns_discrete_range") {
+		data$phi <- c(0.01, 0.10, 0.10, 0.20)
+		Sigma <- calc_ns_cov(tau=kn, sigma=sqrt(ks), phi=data$phi, Nr=length(data$phi), R=design$d_gridR$B, S=design$S, D2=design$D2)
 	} else if (factors$data == "ns_continuous") {
 		# make range decay from east to west
 		data$phi <- 0.01 + (1-design$S[,1])*0.05
@@ -119,7 +131,7 @@ print(unlist(r))
 
 	# split into training and test sets
 	#data$which.test <- sample.int(factors$n, floor(factors$n/2))
-	data$which.test <- sample.int(factors$n, 500)
+	data$which.test <- sample.int(factors$n, 100)
 	data$which.train <- (1:factors$n)[-data$which.test]
 
 	data$n.test  <- length(data$which.test)
@@ -271,7 +283,7 @@ print(unlist(r))
 				R=(design$gridR$B[-data$which.test])[-in.h], Rn=design$gridR$neighbors,
 				B=(design$gridB$B[-data$which.test])[-in.h], Bn=design$gridB$neighbors,
 				#B=rep(1, length( (design$gridB$B[-data$which.test])[-in.h] )), Bn=cbind(1,1),
-				init.phi=init.phi, verbose=FALSE
+				init.phi=init.phi, verbose=FALSE, fuse=TRUE
 			)
 
 			if (fit$conv == 1) {
@@ -386,18 +398,20 @@ sim.design <- list(
 
 sim.factors <- expand.grid(
 	# generate data from this type of model
-	data=c("stationary","ns_discrete","ns_continuous"),
+	#data=c("stationary","ns_discrete","ns_continuous"),
+	#data=c("ns_discrete"),
+	data=c("ns_discrete_tau"),
 	# amount of data to generate: half used for fit, half for test
 	#n=45^2
-	n=39^2  # 500 test
-	#n=34^2  # 100 test
+	#n=39^2  # 500 test
+	n=30^2  # 100 test
 )
 
 if (TRUE) {
 	options(cores=4)
 
 	# run the experiment for each combination of factors
-	res <- lapply(3:3, function(i) { #nrow(sim.factors), function(i) {
+	res <- lapply(1:1, function(i) { #nrow(sim.factors), function(i) {
 	#res <- lapply(1:nrow(sim.factors), function(i) {
 	  print(sim.factors[i,])
 	  exp_res <- sim_exp(sim.design, sim.factors[i,], i)

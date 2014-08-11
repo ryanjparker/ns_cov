@@ -1,6 +1,676 @@
 # estimate parameters in NS models
 
-"ns_estimate_range" <- cmpfun( function(lambda, y, S, R, Rn, B, Bn, D, D2, init.phi, verbose=FALSE) {
+"ns_estimate_all" <- function(lambda, y, S, R, Rn, B, Bn, D, D2,
+	cov.params, inits,
+	fuse=FALSE, verbose=FALSE
+) {
+	# estimates NS parameters with penalty lambda
+	#  y: observed data
+	#  S: spatial locations
+	#  R: subregion memberships
+	# Rn: subregion neighbors
+	#  B: block memberships
+	# Bn: block neighbors
+	#  D: distance matrix for S
+	# D2: squared distance matrix for S
+	# cov.params: list for covariance specification
+	# - usage: list(nugget=list(type=c(vary,single,fixed), value=x), ...)
+	# inits: list of initial values
+	# - usage: list(nugget=x, ...)
+	# fuse: use L1 regularization when true
+	# verbose: show output at each iteration
+
+	#####################################################################
+	# parameters:
+	# - tau=nugget, sigma=partial sill, phi=range
+	# - g_tau, g_sigma, g_phi: auxiliary variables for fusion
+	# - alpha: update scale; reduced when log-likelihood doens't improve
+	#####################################################################
+
+	# change lambda scale for fusion
+	if (fuse) lambda_0 <- lambda^2/4
+
+	# default update scale
+	alpha <- 1
+
+	# number of subregions
+	Nr <- length(unique(R))
+
+	# number of blocks
+	Nb <- length(unique(B))
+
+	# number of observations
+	n      <- length(y)
+
+	# setup parameters
+	tau     <- ltau   <- NA
+	sigma   <- lsigma <- NA
+	phi     <- lphi   <- NA
+	Ntau    <- Nsigma <- Nphi <- NA
+	isFixed <- list(nugget=FALSE, psill=FALSE, range=FALSE)
+
+	if (missing(cov.params)) {
+		# parameter varies in each region
+		Ntau <- Nsigma <- Nphi <- Nr
+	} else {
+		if (is.null(cov.params$nugget) | cov.params$nugget$type=="vary") Ntau   <- Nr else Ntau   <- 1
+		if (is.null(cov.params$psill)  | cov.params$psill$type=="vary" ) Nsigma <- Nr else Nsigma <- 1
+		if (is.null(cov.params$range)  | cov.params$range$type=="vary" ) Nphi   <- Nr else Nphi   <- 1
+
+		if (!is.null(cov.params$nugget) & cov.params$nugget$type=="fixed") { isFixed$nugget <- TRUE; tau   <- cov.params$nugget$value }
+		if (!is.null(cov.params$psill)  & cov.params$psill$type=="fixed" ) { isFixed$psill  <- TRUE; sigma <- cov.params$psill$value  }
+		if (!is.null(cov.params$range)  & cov.params$range$type=="fixed" ) { isFixed$range  <- TRUE; phi   <- cov.params$range$value  }
+	}
+
+	if (!missing(inits) && !is.null(inits[["nugget"]]) && !is.null(inits[["psill"]]) && !is.null(inits[["range"]])) {
+		# we have everything we need to start
+		tau   <- inits[["nugget"]]
+		sigma <- inits[["psill"]]
+		phi   <- inits[["range"]]
+	} else {
+		# get starting values with variogram
+		points <- sample(n, min(n,1000))
+		d      <- dist(S[points,])
+		qphi   <- quantile(d, 0.1)
+
+		v <- variogram(y~1, ~s1+s2, data=data.frame(y=y, s1=S[,1], s2=S[,2]))
+		v.fit <- fit.variogram(v, vgm(2*var(y)/3, "Exp", qphi, var(y)/3))
+		if (attr(v.fit, "singular")) stop("singular variogram fit")
+
+#print(v.fit); print(inits); done
+
+		if (!isFixed$nugget) {
+			if (is.null(inits[["nugget"]])) tau   <- rep(v.fit[1,"psill"], Ntau)
+			else                            tau   <- inits[["nugget"]]
+		}
+
+		if (!isFixed$psill) {
+			if (is.null(inits[["psill"]]))  sigma <- sqrt( rep(v.fit[2,"psill"], Nsigma) )
+			else                            sigma <- inits[["psill"]]
+		}
+
+		if (!isFixed$range) {
+			if (is.null(inits[["range"]]))  phi   <- rep(v.fit[2,"range"], Nphi)
+			else                            phi   <- inits[["range"]]
+		}
+	}
+
+	ltau   <- log(tau)
+	lsigma <- log(sigma)
+	lphi   <- log(phi)
+
+	if (length(tau)   != Ntau  ) stop(paste0("Error with tau init. Found",length(tau),"expected",Ntau,"\n"))
+	if (length(sigma) != Nsigma) stop(paste0("Error with sigma init. Found",length(sigma),"expected",Nsigma,"\n"))
+	if (length(phi)   != Nphi  ) stop(paste0("Error with phi init. Found",length(phi),"expected",Nphi,"\n"))
+
+	# compute distance matrices if they are not specified
+	if (missing(D)) {
+		D  <- rdist(S)
+		diag(D)  <- 0
+	}
+
+	if (missing(D2)) {
+		D2 <- rdist(S[,1])^2 + rdist(S[,2])^2
+		diag(D2) <- 0
+	}
+
+	# things for estimation
+	nH <- Nr*(Nr+1)/2
+	seq.Nr <- 1:Nr
+	seq.Nr2 <- 1:(Nr^2)
+	seq.NrH <- 1:nH
+
+	if (Nr > 1) {
+		# which regions are neighbors?
+		which.Rn <- vector("list", Nr)
+		for (r in 1:Nr) {
+			which.Rn[[r]] <- sort( unique(c(Rn[Rn[,1] == r,2],Rn[Rn[,2] == r,1])) )
+		}
+
+		# which row of Rn is the neighbor?
+		which.neigh <- matrix(NA, nrow=Nr, ncol=Nr)
+		sapply(1:nrow(Rn), function(i) {
+			which.neigh[ Rn[i,1], Rn[i,2] ] <<- i
+			which.neigh[ Rn[i,2], Rn[i,1] ] <<- i
+		})
+	}
+
+	# tau: compute partials wrt Sigma(i,j)
+	partials_tau <- function(region, tau, ltau, n.pair, in.pair) {
+		D.pair   <- D[in.pair,in.pair]
+		R.pair   <- R[in.pair]
+		R.region <- which(R.pair==region)
+		notR.region <- which(R.pair!=region)
+		n.region <- length(R.region)
+
+		M <- matrix(0, nrow=n.pair, ncol=n.pair)
+
+		if (n.region > 0) {
+			# this pair has param
+
+			diag(M)[R.region] <- tau[region]
+		}
+
+		M
+	}
+
+	# sigma: compute partials wrt cov2cor( Sigma )(i,j)
+	partials_sigma <- function(region, sigma, lsigma, n.pair, in.pair) {
+		D.pair   <- D[in.pair,in.pair]
+		R.pair   <- R[in.pair]
+		R.region <- which(R.pair==region)
+		notR.region <- which(R.pair!=region)
+		n.region <- length(R.region)
+
+		M <- matrix(0, nrow=n.pair, ncol=n.pair)
+
+		if (n.region > 0) {
+			# this pair has param
+			M[R.region,R.region] <- 2
+
+			if (n.pair != n.region) {
+				# we have elements in pair that are not in this region
+				M[R.region,notR.region] <- 1
+				M[notR.region,R.region] <- t(M[R.region,notR.region])
+			}
+		}
+
+		M
+	}
+
+	# phi: compute partials wrt log Sigma(i,j)
+	lpartials_phi <- function(region, phi, lphi, n.pair, in.pair) {
+		D.pair   <- D[in.pair,in.pair]
+		R.pair   <- R[in.pair]
+		R.region <- which(R.pair==region)
+		notR.region <- which(R.pair!=region)
+		n.region <- length(R.region)
+
+		M <- matrix(0, nrow=n.pair, ncol=n.pair)
+
+		if (n.region > 0) {
+			# this pair has param
+			M[R.region,R.region] <- D.pair[R.region,R.region]/phi[region]
+
+			if (n.pair != n.region) {
+				# we have elements in pair that are not in this region
+				a <- matrix(phi[region]^2 + (phi^2)[R.pair[notR.region]], nrow=length(R.region), ncol=length(notR.region), byrow=TRUE)
+				M[R.region,notR.region] <- 1 - phi[region]^2/a * (2 - sqrt(2)*D.pair[R.region,notR.region]/sqrt(a))
+				M[notR.region,R.region] <- t(M[R.region,notR.region])
+			}
+		}
+
+		M
+	}
+
+	# function to update parameters with fisher scoring
+	u <- rep(0, Nr)
+	W <- vector("list", Nr)
+	H <- rep(0, Nr*(Nr+1)/2)
+	FI <- matrix(0, nrow=Nr, ncol=Nr)
+
+	"update_ltau" <- function(ltau, tau) {
+		u[seq.Nr]   <<- 0
+		H[seq.NrH]  <<- 0
+		FI[seq.Nr2] <<- 0
+
+		apply(Bn, 1, function(row) {
+			in.pair <- which(B==row[1] | B==row[2])
+			n.pair <- length(in.pair)
+
+			Sigma <- calc_ns_cov(tau=tau, sigma=sigma, phi=phi, Nr=Nr, R=R[in.pair], D2=D2[in.pair,in.pair])
+			invSigma <- chol2inv(chol(Sigma))
+			q <- invSigma %*% y[in.pair]
+
+			# compute the Ws
+			for (r in 1:Ntau) {
+				partial <- partials_tau(r, tau, ltau, n.pair, in.pair)
+				W[[r]] <<- invSigma %*% partial
+				u[r] <<- u[r] -0.5 * sum( diag(W[[r]]) ) + 0.5 * t(q) %*% partial %*% q
+			}
+
+			# compute the hessian H
+			# this is stored in a compact form in H and then expanded into FI (fisher info)
+			index <- 1
+			sapply(1:Ntau, function(r) {
+				sapply(r:Ntau, function(s) {
+					H[index] <<- H[index] + 0.5 * sum_diag_mm(W[[r]], W[[s]])
+
+					index <<- index+1
+				})
+			})
+
+		})
+
+		if (lambda > 0 && Ntau > 1) {
+			# add in penalty...
+
+			# ... to score
+			for (r in 1:Ntau) {
+				if (!fuse) {
+					u[r] <- u[r] -2*lambda*sum(ltau[r] - ltau[ which.Rn[[r]] ])
+				} else {
+					u[r] <- u[r] -2*sum( (ig_tau[ which.neigh[r,!is.na(which.neigh[r,])] ]) * (ltau[r] - ltau[ which.Rn[[r]] ]) )
+				}
+			}
+
+			# ... to Hessian
+			index <- 1
+			sapply(1:Ntau, function(r) {
+				jdx <- 1
+				sapply(r:Ntau, function(s) {
+					if (r==s) {
+						if (!fuse) {
+							H[index] <<- H[index] +2*lambda*length(which.Rn[[r]])
+						} else {
+							H[index] <<- H[index] +2*sum( (ig_tau[ which.neigh[r,!is.na(which.neigh[r,])] ]) )
+						}
+					} else if (sum(which.Rn[[r]]==s) > 0) {
+						if (!fuse) {
+							H[index] <<- H[index] -2*lambda
+						} else {
+							H[index] <<- H[index] -2*(ig_tau[ which.neigh[r,s] ])
+						}
+						jdx <<- jdx+1
+					}
+					index <<- index+1
+				})
+			})
+		}
+
+		index <- 1
+		sapply(1:Ntau, function(r) {
+			sapply(r:Ntau, function(s) {
+				FI[r,s] <<- H[index]
+				if (r != s) {
+					FI[s,r] <<- H[index]
+				}
+				index <<- index+1
+			})
+		})
+
+		# cap change at 1 since we're on log scale
+		change <- chol2inv(chol(FI[1:Ntau,1:Ntau])) %*% u[1:Ntau]
+		change <- ifelse(abs(change) >= 1, sign(change)*1, change)
+
+		ltau <- ltau + alpha*change
+
+		if (fuse & Ntau > 1) {
+			# threshold together
+			sapply(1:nrow(Rn), function(i) {
+				if ( abs(ltau[ Rn[i,1] ] - ltau[ Rn[i,2] ])/abs(ltau[ Rn[i,1] ]) < 1e-4 ) {
+					ltau[Rn[i,2]] <<- ltau[Rn[i,1]]
+				}
+			})
+		}
+
+		ltau
+	}
+
+	"update_lsigma" <- function(lsigma, sigma) {
+		u[seq.Nr]   <<- 0
+		H[seq.NrH]  <<- 0
+		FI[seq.Nr2] <<- 0
+
+		apply(Bn, 1, function(row) {
+			in.pair <- which(B==row[1] | B==row[2])
+			n.pair <- length(in.pair)
+
+			Sigma <- calc_ns_cov(tau=tau, sigma=sigma, phi=phi, Nr=Nr, R=R[in.pair], D2=D2[in.pair,in.pair])
+			invSigma <- chol2inv(chol(Sigma))
+			q <- invSigma %*% y[in.pair]
+
+			# compute the Ws
+			for (r in 1:Nsigma) {
+				if (Ntau > 1) {
+					partial <- (Sigma-diag(tau[R[in.pair]])) * partials_sigma(r, sigma, lsigma, n.pair, in.pair)
+				} else {
+					partial <- (Sigma-diag(rep(tau,n.pair))) * partials_sigma(r, sigma, lsigma, n.pair, in.pair)
+				}
+				W[[r]] <<- invSigma %*% partial
+				u[r] <<- u[r] -0.5 * sum( diag(W[[r]]) ) + 0.5 * t(q) %*% partial %*% q
+			}
+
+			# compute the hessian H
+			# this is stored in a compact form in H and then expanded into FI (fisher info)
+			index <- 1
+			sapply(1:Nsigma, function(r) {
+				sapply(r:Nsigma, function(s) {
+					H[index] <<- H[index] + 0.5 * sum_diag_mm(W[[r]], W[[s]])
+
+					index <<- index+1
+				})
+			})
+
+		})
+
+		if (lambda > 0 && Nsigma > 1) {
+			# add in penalty...
+
+			# ... to score
+			for (r in 1:Nsigma) {
+				if (!fuse) {
+					u[r] <- u[r] -2*lambda*sum(lsigma[r] - lsigma[ which.Rn[[r]] ])
+				} else {
+					u[r] <- u[r] -2*sum( (ig_sigma[ which.neigh[r,!is.na(which.neigh[r,])] ]) * (lsigma[r] - lsigma[ which.Rn[[r]] ]) )
+				}
+			}
+
+			# ... to Hessian
+			index <- 1
+			sapply(1:Nsigma, function(r) {
+				jdx <- 1
+				sapply(r:Nsigma, function(s) {
+					if (r==s) {
+						if (!fuse) {
+							H[index] <<- H[index] +2*lambda*length(which.Rn[[r]])
+						} else {
+							H[index] <<- H[index] +2*sum( (ig_sigma[ which.neigh[r,!is.na(which.neigh[r,])] ]) )
+						}
+					} else if (sum(which.Rn[[r]]==s) > 0) {
+						if (!fuse) {
+							H[index] <<- H[index] -2*lambda
+						} else {
+							H[index] <<- H[index] -2*(ig_sigma[ which.neigh[r,s] ])
+						}
+						jdx <<- jdx+1
+					}
+					index <<- index+1
+				})
+			})
+		}
+
+		index <- 1
+		sapply(1:Nsigma, function(r) {
+			sapply(r:Nsigma, function(s) {
+				FI[r,s] <<- H[index]
+				if (r != s) {
+					FI[s,r] <<- H[index]
+				}
+				index <<- index+1
+			})
+		})
+
+		# cap change at 1 since we're on log scale
+		change <- chol2inv(chol(FI[1:Nsigma,1:Nsigma])) %*% u[1:Nsigma]
+		change <- ifelse(abs(change) >= 1, sign(change)*1, change)
+
+		lsigma <- lsigma + alpha*change
+
+		if (fuse & Nsigma > 1) {
+			# threshold together
+			sapply(1:nrow(Rn), function(i) {
+				if ( abs(lsigma[ Rn[i,1] ] - lsigma[ Rn[i,2] ])/abs(lsigma[ Rn[i,1] ]) < 1e-4 ) {
+					lsigma[Rn[i,2]] <<- lsigma[Rn[i,1]]
+				}
+			})
+		}
+
+		lsigma
+	}
+
+	"update_lphi" <- function(lphi, phi) {
+		u[seq.Nr]   <<- 0
+		H[seq.NrH]  <<- 0
+		FI[seq.Nr2] <<- 0
+
+		apply(Bn, 1, function(row) {
+			in.pair <- which(B==row[1] | B==row[2])
+			n.pair <- length(in.pair)
+
+			Sigma <- calc_ns_cov(tau=tau, sigma=sigma, phi=phi, Nr=Nr, R=R[in.pair], D2=D2[in.pair,in.pair])
+			invSigma <- chol2inv(chol(Sigma))
+			q <- invSigma %*% y[in.pair]
+
+			# compute the Ws
+			for (r in 1:Nphi) {
+				partial <- Sigma * lpartials_phi(r, phi, lphi, n.pair, in.pair)
+				W[[r]] <<- invSigma %*% partial
+				u[r] <<- u[r] -0.5 * sum( diag(W[[r]]) ) + 0.5 * t(q) %*% partial %*% q
+			}
+
+			# compute the hessian H
+			# this is stored in a compact form in H and then expanded into FI (fisher info)
+			index <- 1
+			sapply(1:Nphi, function(r) {
+				sapply(r:Nphi, function(s) {
+					H[index] <<- H[index] + 0.5 * sum_diag_mm(W[[r]], W[[s]])
+
+					index <<- index+1
+				})
+			})
+
+		})
+
+		if (lambda > 0 && Nphi > 1) {
+			# add in penalty...
+
+			# ... to score
+			for (r in 1:Nphi) {
+				if (!fuse) {
+					u[r] <- u[r] -2*lambda*sum(lphi[r] - lphi[ which.Rn[[r]] ])
+				} else {
+					u[r] <- u[r] -2*sum( (ig_phi[ which.neigh[r,!is.na(which.neigh[r,])] ]) * (lphi[r] - lphi[ which.Rn[[r]] ]) )
+				}
+			}
+
+			# ... to Hessian
+			index <- 1
+			sapply(1:Nphi, function(r) {
+				jdx <- 1
+				sapply(r:Nphi, function(s) {
+					if (r==s) {
+						if (!fuse) {
+							H[index] <<- H[index] +2*lambda*length(which.Rn[[r]])
+						} else {
+							H[index] <<- H[index] +2*sum( (ig_phi[ which.neigh[r,!is.na(which.neigh[r,])] ]) )
+						}
+					} else if (sum(which.Rn[[r]]==s) > 0) {
+						if (!fuse) {
+							H[index] <<- H[index] -2*lambda
+						} else {
+							H[index] <<- H[index] -2*(ig_phi[ which.neigh[r,s] ])
+						}
+						jdx <<- jdx+1
+					}
+					index <<- index+1
+				})
+			})
+		}
+
+		index <- 1
+		sapply(1:Nphi, function(r) {
+			sapply(r:Nphi, function(s) {
+				FI[r,s] <<- H[index]
+				if (r != s) {
+					FI[s,r] <<- H[index]
+				}
+				index <<- index+1
+			})
+		})
+
+		# cap change at 1 since we're on log scale
+		change <- chol2inv(chol(FI[1:Nphi,1:Nphi])) %*% u[1:Nphi]
+		change <- ifelse(abs(change) >= 1, sign(change)*1, change)
+
+		lphi <- lphi + alpha*change
+
+		if (fuse & Nphi > 1) {
+			# threshold together
+			sapply(1:nrow(Rn), function(i) {
+				if ( abs(lphi[ Rn[i,1] ] - lphi[ Rn[i,2] ])/abs(lphi[ Rn[i,1] ]) < 1e-4 ) {
+					lphi[Rn[i,2]] <<- lphi[Rn[i,1]]
+				}
+			})
+		}
+
+		lphi
+	}
+
+	"update_g_tau" <- function() {
+		# compute gammas given taus
+		sapply(1:nrow(Rn), function(i) {
+			sqrt( (ltau[ Rn[i,1] ] - ltau[ Rn[i,2] ])^2/lambda_0 )
+		})
+	}
+
+	"update_g_sigma" <- function() {
+		# compute gammas given sigmas
+		sapply(1:nrow(Rn), function(i) {
+			sqrt( (lsigma[ Rn[i,1] ] - lsigma[ Rn[i,2] ])^2/lambda_0 )
+		})
+	}
+
+	"update_g_phi" <- function() {
+		# compute gammas given phis
+		sapply(1:nrow(Rn), function(i) {
+			sqrt( (lphi[ Rn[i,1] ] - lphi[ Rn[i,2] ])^2/lambda_0 )
+		})
+	}
+
+	"loglik" <- function(tau, sigma, phi) {
+		ll <- sum( apply(Bn, 1, function(row) {
+			in.b1 <- sum(B==row[1])
+			in.b2 <- sum(B==row[2])
+
+			in.pair <- which(B==row[1] | B==row[2])
+			n.pair <- length(in.pair)
+
+			# compute covariance
+			Sigma <- calc_ns_cov(tau=tau, sigma=sigma, phi=phi, Nr=Nr, R=R[in.pair], D2=D2[in.pair,in.pair])
+			cholSigma <- chol(Sigma)
+			invSigma <- chol2inv(cholSigma)
+
+			-sum(log(diag(cholSigma))) -0.5 * t(y[in.pair]) %*% invSigma %*% y[in.pair]
+		}) )
+	}
+
+	"penalty" <- function(ltau, lsigma, lphi) {
+		res <- 0
+		if (Nr <= 1) {
+			res <- 0
+		} else if (!fuse) {
+			if (Ntau   > 1) res <- res+sum((  ltau[Rn[,1]] -   ltau[Rn[,2]])^2)
+			if (Nsigma > 1) res <- res+sum((lsigma[Rn[,1]] - lsigma[Rn[,2]])^2)
+			if (Nphi   > 1) res <- res+sum((  lphi[Rn[,1]] -   lphi[Rn[,2]])^2)
+			res <- lambda*res
+		} else if (fuse) {
+			if (Ntau   > 1) res <- res+sum(abs(  ltau[Rn[,1]] -   ltau[Rn[,2]]))
+			if (Nsigma > 1) res <- res+sum(abs(lsigma[Rn[,1]] - lsigma[Rn[,2]]))
+			if (Nphi   > 1) res <- res+sum(abs(  lphi[Rn[,1]] -   lphi[Rn[,2]]))
+			res <- lambda*res
+		} else {
+			stop("Should we add penalty?")
+		}
+	}
+
+	maxIter <- 50
+	if (fuse) tol <- 1e-5
+	else      tol <- 1e-6
+
+	if (fuse) {
+		if (Ntau   > 1) {
+			g_tau   <- update_g_tau()
+			ig_tau   <- 1/g_tau  ; if (sum(ig_tau   == Inf)) ig_tau[ig_tau==Inf]     <- 1000
+		}
+		if (Nsigma > 1) {
+			g_sigma <- update_g_sigma()
+			ig_sigma <- 1/g_sigma; if (sum(ig_sigma == Inf)) ig_sigma[ig_sigma==Inf] <- 1000
+		}
+		if (Nphi   > 1) {
+			g_phi   <- update_g_phi()
+			ig_phi   <- 1/g_phi  ; if (sum(ig_phi   == Inf)) ig_phi[ig_phi==Inf]     <- 1000
+		}
+	}
+
+	ll <- loglik(tau, sigma, phi)
+	pll <- ll -penalty(ltau, lsigma, lphi)
+
+	# estimate params
+	for (iter in 1:maxIter) {
+		prev.ll     <- ll    ; prev.pll    <- pll
+		prev.tau    <- tau   ; prev.ltau   <- ltau
+		prev.sigma  <- sigma ; prev.lsigma <- lsigma
+		prev.phi    <- phi   ; prev.lphi   <- lphi
+		if (fuse & Ntau   > 1) { prev.g_tau   <- g_tau  ; prev.ig_tau   <- ig_tau   }
+		if (fuse & Nsigma > 1) { prev.g_sigma <- g_sigma; prev.ig_sigma <- ig_sigma }
+		if (fuse & Nphi   > 1) { prev.g_phi   <- g_phi  ; prev.ig_phi   <- ig_phi   }
+
+		if (!isFixed$nugget) {
+			# update nugget
+			ltau <- update_ltau(prev.ltau, prev.tau)
+			tau <- exp(ltau)
+			if (fuse & Ntau > 1) { # update gamma
+				g_tau  <- update_g_tau()
+				ig_tau <- 1/g_tau  ; if (sum(ig_tau   == Inf)) ig_tau[ig_tau==Inf]     <- 1000
+			}
+#ll <- loglik(tau, sigma, phi); pll <- ll -penalty(ltau, lsigma, lphi); cat("after nugget:",pll,"\n")
+		}
+
+		if (!isFixed$psill) {
+			# update partial sill
+			lsigma <- update_lsigma(prev.lsigma, prev.sigma)
+			sigma <- exp(lsigma)
+			if (fuse & Nsigma > 1) { # update gamma
+				g_sigma  <- update_g_sigma()
+				ig_sigma <- 1/g_sigma  ; if (sum(ig_sigma   == Inf)) ig_sigma[ig_sigma==Inf]     <- 1000
+			}
+#ll <- loglik(tau, sigma, phi); pll <- ll -penalty(ltau, lsigma, lphi); cat("after psill:",pll,"\n")
+		}
+
+		if (!isFixed$range) {
+			# update range
+			lphi <- update_lphi(prev.lphi, prev.phi)
+			phi <- exp(lphi)
+			if (fuse & Nphi > 1) { # update gamma
+				g_phi  <- update_g_phi()
+				ig_phi <- 1/g_phi  ; if (sum(ig_phi   == Inf)) ig_phi[ig_phi==Inf]     <- 1000
+			}
+#ll <- loglik(tau, sigma, phi); pll <- ll -penalty(ltau, lsigma, lphi); cat("after range:",pll,"\n")
+		}
+
+		# compute log-likelihood
+		ll <- loglik(tau, sigma, phi)
+		pll <- ll -penalty(ltau, lsigma, lphi)
+
+		if (pll < prev.pll) {
+			# reduce stepsize
+			alpha <- alpha*0.5
+		}
+
+		if (verbose) {
+			cat(
+				paste0("iter=",iter,
+					" ; pll: ",round(pll,2),"\n",
+					"-->   tau: ",paste(round(tau,2) ,collapse=" "),"\n",
+					"--> sigma: ",paste(round(sigma,2) ,collapse=" "),"\n",
+					"-->   phi: ",paste(round(phi,2) ,collapse=" "),"\n"
+				)
+			)
+		}
+
+		# have we converged?
+		if (abs(pll - prev.pll)/(0.1 + abs(pll)) <= tol) {
+			if (verbose) cat("Converged at iteration",iter,"\n")
+			break
+		}
+
+	}
+
+	convergence <- TRUE
+	if (iter == maxIter) {
+		warning("Possible issues with convergence: maximum number of iterations reached.")
+		convergence <- FALSE
+	}
+
+	list(
+		conv=as.integer(convergence),
+		tau=as.vector(tau), sigma=as.vector(sigma), phi=as.vector(phi),
+		ll=ll, pll=pll
+	)
+}
+
+"ns_estimate_range" <- cmpfun( function(lambda, y, S, R, Rn, B, Bn, D, D2, init.phi, verbose=FALSE, fuse=FALSE) {
 	# estimates range parameters with penalty lambda
 	# y: observed data
 	# S: spatial locations
@@ -8,6 +678,10 @@
 	# Rn: subregion neighbors
 	# B: block memberships
 	# Bn: block neighbors
+
+	if (!missing(init.phi)) print(round(init.phi,4))
+
+	if (fuse) lambda_0 <- lambda^2/4
 
 	alpha <- 1
 
@@ -43,12 +717,21 @@
 	seq.Nr2 <- 1:(Nr^2)
 	seq.NrH <- 1:nH
 
-	# which regions are neighbors?
 	if (Nr > 1) {
+		# which regions are neighbors?
 		which.Rn <- vector("list", Nr)
 		for (r in 1:Nr) {
 			which.Rn[[r]] <- sort( unique(c(Rn[Rn[,1] == r,2],Rn[Rn[,2] == r,1])) )
 		}
+
+#print(Nr); print(Rn); done
+
+		# which row of Rn is the neighbor?
+		which.neigh <- matrix(NA, nrow=Nr, ncol=Nr)
+		sapply(1:nrow(Rn), function(i) {
+			which.neigh[ Rn[i,1], Rn[i,2] ] <<- i
+			which.neigh[ Rn[i,2], Rn[i,1] ] <<- i
+		})
 	}
 
 #	lpartials <- list(
@@ -88,7 +771,8 @@ apply(Bn, 1, function(row) {
 	in.pair <- B==row[1] | B==row[2]
 	n.pair <- sum(in.pair)
 
-	Sigma <- fast_ns_cov(phi=phi, n=n.pair, Nr=Nr, R=R[in.pair], D2=D2[in.pair,in.pair])
+	#Sigma <- fast_ns_cov(phi=phi, n=n.pair, Nr=Nr, R=R[in.pair], D2=D2[in.pair,in.pair])
+	Sigma <- calc_ns_cov(tau=kn, sigma=sqrt(ks), phi=phi, Nr=Nr, R=R[in.pair], D2=D2[in.pair,in.pair])
 	L <- lpartials(1, phi, lphi, n.pair, in.pair)
 print(round(L[1:10,1:10],3))
 print(round((Sigma*L)[1:10,1:10],3))
@@ -109,35 +793,48 @@ done
 		H[seq.NrH]  <<- 0
 		FI[seq.Nr2] <<- 0
 
+		#for (i in 1:nrow(Bn)) { row <- Bn[i,]
 		apply(Bn, 1, function(row) {
 			in.pair <- which(B==row[1] | B==row[2])
 			n.pair <- length(in.pair)
 
 			#Sigma <- compute_cov(cov, t_theta(theta), D[in.pair,in.pair])
-			Sigma <- kn*diag(n.pair) + ks*fast_ns_cov(phi=phi, n=n.pair, Nr=Nr, R=R[in.pair], D2=D2[in.pair,in.pair])
+			#Sigma <- kn*diag(n.pair) + ks*fast_ns_cov(phi=phi, n=n.pair, Nr=Nr, R=R[in.pair], D2=D2[in.pair,in.pair])
+#t1 <- proc.time()
+			Sigma <- calc_ns_cov(tau=kn, sigma=sqrt(ks), phi=phi, Nr=Nr, R=R[in.pair], D2=D2[in.pair,in.pair])
 			invSigma <- chol2inv(chol(Sigma))
 			q <- invSigma %*% y[in.pair]
+#cat("[1] ");print(proc.time()-t1)
 
+#t1 <- proc.time()
+# thread this?
 			# compute the Ws
 			for (r in 1:Nr) {
-				partial <- Sigma * lpartials(r, phi, lphi, n.pair, in.pair)
+				#partial <- Sigma * lpartials(r, phi, lphi, n.pair, in.pair)
+				#W[[r]] <<- invSigma %*% partial
+				partial <- Matrix(as.matrix(Sigma * lpartials(r, phi, lphi, n.pair, in.pair)), sparse=TRUE)
 				W[[r]] <<- invSigma %*% partial
-				u[r] <<- u[r] -0.5 * sum( diag(W[[r]]) ) + 0.5 * t(q) %*% partial %*% q
+				u[r] <<- u[r] -0.5 * sum( diag(W[[r]]) ) + 0.5 * as.vector(t(q) %*% partial %*% q)
 			}
+#cat("[2] ");print(proc.time()-t1)
 
+#t1 <- proc.time()
 			# compute the hessian H
 			# this is stored in a compact form in H and then expanded into FI (fisher info)
 			index <- 1
 			sapply(seq.Nr, function(r) {
 				sapply(r:Nr, function(s) {
-					H[index] <<- H[index] + 0.5 * sum(diag( W[[r]] %*% W[[s]] ))
+					#H[index] <<- H[index] + 0.5 * sum(diag( W[[r]] %*% W[[s]] ))
+					H[index] <<- H[index] + 0.5 * sum_diag_mm(W[[r]], W[[s]]) #sum(diag( W[[r]] %*% W[[s]] ))
+
 					index <<- index+1
 				})
 			})
+#cat("[3] ");print(proc.time()-t1)
 
 		})
-#print(u); done
 
+#t1 <- proc.time()
 		if (lambda > 0 && Nr > 1) {
 #cat("Penalty!\n")
 			# add in penalty...
@@ -145,19 +842,34 @@ done
 			# ... to score
 			for (r in 1:Nr) {
 				#u[r] <- u[r] -2*lambda*phi[r]*sum(phi[r] - phi[ which.Rn[[r]] ])
-				u[r] <- u[r] -2*lambda*sum(lphi[r] - lphi[ which.Rn[[r]] ])
+				if (!fuse) {
+					u[r] <- u[r] -2*lambda*sum(lphi[r] - lphi[ which.Rn[[r]] ])
+				} else {
+					u[r] <- u[r] -2*sum( (igamma[ which.neigh[r,!is.na(which.neigh[r,])] ]) * (lphi[r] - lphi[ which.Rn[[r]] ]) )
+				}
 			}
+#cat("u:\n"); print(round(u,3))
 
 			# ... to Hessian
 			index <- 1
 			sapply(seq.Nr, function(r) {
+				jdx <- 1
 				sapply(r:Nr, function(s) {
 					if (r==s) {
 						#H[index] <<- H[index] -2*lambda*phi[r]*(2*phi[r]*length(which.Rn[[r]]) - sum(phi[ which.Rn[[r]] ]))
-						H[index] <<- H[index] +2*lambda*length(which.Rn[[r]])
+						if (!fuse) {
+							H[index] <<- H[index] +2*lambda*length(which.Rn[[r]])
+						} else {
+							H[index] <<- H[index] +2*sum( (igamma[ which.neigh[r,!is.na(which.neigh[r,])] ]) )
+						}
 					} else if (sum(which.Rn[[r]]==s) > 0) {
 						#H[index] <<- H[index] + 2*lambda*phi[r]*phi[s]
-						H[index] <<- H[index] -2*lambda
+						if (!fuse) {
+							H[index] <<- H[index] -2*lambda
+						} else {
+							H[index] <<- H[index] -2*(igamma[ which.neigh[r,s] ])
+						}
+						jdx <<- jdx+1
 					}
 					index <<- index+1
 				})
@@ -165,6 +877,7 @@ done
 		} else {
 #print(u)
 		}
+#cat("[4] ");print(proc.time()-t1)
 
 		index <- 1
 		sapply(seq.Nr, function(r) {
@@ -177,13 +890,34 @@ done
 			})
 		})
 
+#cat("H:\n"); print(round(head(H),3))
+
 		# cap change at 1 since we're on log scale
 		change <- chol2inv(chol(FI)) %*% u
+#cat("change:\n"); print(round(as.vector(change),3))
+#print(round(FI,3)); print(round(u,3)); print(round(change,3)); done
 		change <- ifelse(abs(change) >= 1, sign(change)*1, change)
 
 		lphi <- lphi + alpha*change
 
+		if (fuse) {
+			# threshold together
+			sapply(1:nrow(Rn), function(i) {
+				if ( abs(lphi[ Rn[i,1] ] - lphi[ Rn[i,2] ])/abs(lphi[ Rn[i,1] ]) < 1e-4 ) {
+#cat("Threshold for",i,"\n")
+					lphi[Rn[i,2]] <<- lphi[Rn[i,1]]
+				}
+			})
+		}
+
 		lphi
+	}
+
+	"update_gamma" <- function() {
+		# compute gammas given phis
+		sapply(1:nrow(Rn), function(i) {
+			sqrt( (lphi[ Rn[i,1] ] - lphi[ Rn[i,2] ])^2/lambda_0 )
+		})
 	}
 
 	"loglik" <- function(phi) {
@@ -194,7 +928,8 @@ done
 			in.pair <- which(B==row[1] | B==row[2])
 			n.pair <- length(in.pair)
 
-			Sigma <- kn*diag(n.pair) + ks*fast_ns_cov(phi=phi, n=n.pair, Nr=Nr, R=R[in.pair], D2=D2[in.pair,in.pair])
+			#Sigma <- kn*diag(n.pair) + ks*fast_ns_cov(phi=phi, n=n.pair, Nr=Nr, R=R[in.pair], D2=D2[in.pair,in.pair])
+			Sigma <- calc_ns_cov(tau=kn, sigma=sqrt(ks), phi=phi, Nr=Nr, R=R[in.pair], D2=D2[in.pair,in.pair])
 			cholSigma <- chol(Sigma)
 			invSigma <- chol2inv(cholSigma)
 
@@ -203,30 +938,81 @@ done
 	}
 
 	"penalty" <- function(lphi) {
-		if (Nr > 1) {
-			lambda*sum((lphi[Rn[,1]] - lphi[Rn[,2]])^2)
-		} else {
+		if (Nr <= 1) {
 			0
+		} else if (!fuse) {
+			lambda*sum((lphi[Rn[,1]] - lphi[Rn[,2]])^2)
+		} else if (fuse) {
+			lambda*sum(abs(lphi[Rn[,1]] - lphi[Rn[,2]]))
+		} else {
+			stop("Should we add penalty?")
 		}
 	}
 
-	maxIter <- 20
-	tol <- 1e-6
+	maxIter <- 50
+	if (fuse) tol <- 1e-5
+	else      tol <- 1e-6
+
+	if (fuse) {
+		gamma <- update_gamma()
+		igamma <- 1/gamma; if (sum(igamma == Inf)) igamma[igamma==Inf] <- 0 #lambda
+	}
+
 	ll <- loglik(phi)
 	pll <- ll -penalty(lphi)
 
 	# estimate params
 	for (iter in 1:maxIter) {
-		prev.lphi <- lphi
-		prev.phi  <- phi
-		prev.ll   <- ll
-		prev.pll  <- pll
+		prev.lphi   <- lphi
+		prev.phi    <- phi
+		prev.ll     <- ll
+		prev.pll    <- pll
+		if (fuse) {
+			prev.gamma  <- gamma
+			prev.igamma <- igamma
+		}
 
 		# update theta
+#t.phi <- proc.time()
 		lphi <- update_lphi(prev.lphi, prev.phi)
+#t.phi <- proc.time() - t.phi
 		phi <- exp(lphi)
+
+		if (fuse) {
+			# update gamma
+			gamma  <- update_gamma()
+			igamma <- 1/gamma; if (sum(igamma == Inf)) igamma[igamma==Inf] <- 1000
+#cat("Updated gamma:\n"); print(gamma)
+		}
+
+		# compute log-likelihood
+#t.ll <- proc.time()
 		ll <- loglik(phi)
+#t.ll <- proc.time() - t.ll
 		pll <- ll -penalty(lphi)
+
+#print(t.phi)
+#print(t.ll)
+
+#print(c(ll,pll))
+
+		rej <- FALSE
+		if (pll < prev.pll) {
+#cat("Reject! (",pll,",",prev.pll,")\n")
+#			# reject this step
+#			ll     <- prev.ll
+#			pll    <- prev.pll
+#			lphi   <- prev.lphi
+#			phi    <- prev.phi
+#			if (fuse) {
+#				gamma  <- prev.gamma
+#				igamma <- prev.igamma
+#			}
+
+			# reduce stepsize
+			alpha <- alpha*0.5
+			rej   <- TRUE
+		}
 
 		if (verbose) {
 			cat(
@@ -243,15 +1029,12 @@ done
 #		) )
 #		if ( max_diff <= tol ) {
 
+		#if (abs(ll - prev.ll)/(0.1 + abs(ll)) <= tol) {
 		if (abs(pll - prev.pll)/(0.1 + abs(pll)) <= tol) {
 			if (verbose) cat("Converged at iteration",iter,"\n")
 			break
 		}
 
-		if (pll < prev.pll) {
-			# reduce stepsize
-			alpha <- alpha/2
-		}
 	}
 
 	convergence <- TRUE
@@ -354,7 +1137,8 @@ done
 		}
 
 		# compute covariance matrix
-		Sigma <- kn*diag(nFit+nNew) + ks*fast_ns_cov(phi=phi, n=nFit+nNew, Nr=Nr, R=R, D2=D2)
+		#Sigma <- kn*diag(nFit+nNew) + ks*fast_ns_cov(phi=phi, n=nFit+nNew, Nr=Nr, R=R, D2=D2)
+		Sigma <- calc_ns_cov(tau=kn, sigma=sqrt(ks), phi=phi, Nr=Nr, R=R, D2=D2)
 	}
 
 	# get the predictions
@@ -382,7 +1166,8 @@ done
 		}
 
 		# compute covariance matrix
-		Sigma <- kn*diag(nFit+nNew) + ks*fast_ns_cov(phi=phi, n=nFit+nNew, Nr=Nr, R=R, D2=D2)
+		#Sigma <- kn*diag(nFit+nNew) + ks*fast_ns_cov(phi=phi, n=nFit+nNew, Nr=Nr, R=R, D2=D2)
+		Sigma <- calc_ns_cov(tau=kn, sigma=sqrt(ks), phi=phi, Nr=Nr, R=R, D2=D2)
 	}
 
 	C <- Sigma[nFit+1:nNew,1:nFit] %*% chol2inv(chol(Sigma[1:nFit,1:nFit]))
