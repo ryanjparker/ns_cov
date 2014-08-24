@@ -7,9 +7,6 @@ source("R/create_blocks.R")
 source("R/ns_cov.R")
 source("R/ns_estimate.R")
 
-kn <- 0.05
-ks <- 0.95
-
 # function to execte the simulation study based on given factors
 "sim_exp" <- function(design, factors, which.exp) {
 
@@ -20,16 +17,9 @@ ks <- 0.95
 	design$D <- rdist(design$S)
 	diag(design$D) <- 0
 
-	if (factors$data == "ns_discrete"
-	    || factors$data == "ns_discrete_nugget"
-	    || factors$data == "ns_discrete_psill"
-	    || factors$data == "ns_discrete_range") {
-		# compute distance for discrete case
-		design$D2 <- rdist(design$S[,1])^2 + rdist(design$S[,2])^2
-
-		# compute discrete grid
-		design$d_gridR <- create_blocks(design$S, 4, queen=FALSE)
-	}
+	# create discrete grid for parameters
+	design$D2 <- rdist(design$S[,1])^2 + rdist(design$S[,2])^2
+	design$d_gridR <- create_blocks(design$S, 4, queen=FALSE)
 
 	# create blocks for BCL
 	design$gridB <- create_blocks(design$S, design$Nb)
@@ -55,6 +45,8 @@ ks <- 0.95
 
 			# ... non-stationary
 			#res.ns <- eval.ns(design, factors, data, res.s$phi)
+			res.nsL1 <- eval.ns(design, factors, data, res.s$tau, res.s$sigma, res.s$phi, fuse=TRUE)
+			res.nsL2 <- eval.ns(design, factors, data, res.s$tau, res.s$sigma, res.s$phi, fuse=FALSE)
 
 			# ... kernel-convolutions
 			#res.kc <- eval.kc(design, factors, data)
@@ -64,10 +56,12 @@ ks <- 0.95
 			# oracle results
 			o.elapsed=res.o$elapsed, o.c_ll=res.o$c_ll, o.mse=res.o$mse, o.cov=res.o$cov, o.clen=res.o$clen,
 			# stationary results
-			s.success=res.s$success, s.elapsed=res.s$elapsed, s.c_ll=res.s$c_ll, s.mse=res.s$mse, s.cov=res.s$cov, s.clen=res.s$clen#,
+			s.success=res.s$success, s.elapsed=res.s$elapsed, s.c_ll=res.s$c_ll, s.mse=res.s$mse, s.cov=res.s$cov, s.clen=res.s$clen,
 			# non-stationary results
 			#ns.success=res.ns$success, ns.elapsed=res.ns$elapsed, ns.c_ll=res.ns$c_ll, ns.mse=res.ns$mse, ns.cov=res.ns$cov, ns.clen=res.ns$clen,
 			#ns.lambda=res.ns$lambda
+			nsL1.success=res.nsL1$success, nsL1.elapsed=res.nsL1$elapsed, nsL1.c_ll=res.nsL1$c_ll, nsL1.mse=res.nsL1$mse, nsL1.cov=res.nsL1$cov, nsL1.clen=res.nsL1$clen, nsL1.lambda=res.nsL1$lambda,
+			nsL2.success=res.nsL2$success, nsL2.elapsed=res.nsL2$elapsed, nsL2.c_ll=res.nsL2$c_ll, nsL2.mse=res.nsL2$mse, nsL2.cov=res.nsL2$cov, nsL2.clen=res.nsL2$clen, nsL2.lambda=res.nsL2$lambda
     )
 #print(round(unlist(r),3))
 print(unlist(r))
@@ -97,7 +91,10 @@ print(unlist(r))
 		#Sigma <- kn*diag(factors$n) + ks*fast_ns_cov(data$phi, factors$n, length(data$phi), design$d_gridR$B, design$S, design$D2)
 		Sigma <- calc_ns_cov(tau=kn, sigma=sqrt(ks), phi=data$phi, Nr=length(data$phi), R=design$d_gridR$B, S=design$S, D2=design$D2)
 	} else if (factors$data == "ns_discrete_nugget") {
-stop("todo")
+		data$tau   <- 0.05
+		data$sigma <- sqrt(0.95)
+		data$phi   <- c(0.01, 0.10, 0.10, 0.20)
+		Sigma <- calc_ns_cov(tau=data$tau, sigma=data$sigma, phi=data$phi, Nr=length(data$phi), R=design$d_gridR$B, S=design$S, D2=design$D2)
 	} else if (factors$data == "ns_discrete_psill") {
 stop("todo")
 	} else if (factors$data == "ns_discrete_range") {
@@ -125,7 +122,16 @@ stop("todo")
 
 #cat("Generating y\n")
 	# generate response
-	y <- t(chol(Sigma)) %*% rnorm(factors$n)
+	#y <- 
+	#y <- matrix(NA, nrow=factors$n, ncol=factors$Nreps)
+	LSigma <- t(chol(Sigma))
+	y <- sapply(1:factors$Nreps, function(rep) {
+		LSigma %*% rnorm(factors$n)
+	})
+print(dim(y))
+print(str(y))
+done
+
 #pdf("pdf/gp_range_test_y.pdf"); image.plot(matrix(data$y,nrow=sqrt(factors$n))); graphics.off()
 #done
 
@@ -400,7 +406,9 @@ sim.factors <- expand.grid(
 	# generate data from this type of model
 	#data=c("stationary","ns_discrete","ns_continuous"),
 	#data=c("ns_discrete"),
-	data=c("ns_discrete_tau"),
+	data=c("ns_discrete_nugget"),
+	# number of time replications
+	Nreps=10,
 	# amount of data to generate: half used for fit, half for test
 	#n=45^2
 	#n=39^2  # 500 test
