@@ -27,8 +27,8 @@ source("R/ns_estimate.R")
 	# create subregions for NS model
 	design$gridR <- create_blocks(design$S, design$Nr, queen=FALSE)
 
-	#res <- mclapply(1:design$Nreps, function(i) {
-	res <- lapply(1:design$Nreps, function(i) {
+	res <- mclapply(1:design$Nreps, function(i) {
+	#res <- lapply(1:design$Nreps, function(i) {
 		seed <- 1983 + i + design$Nreps*(which.exp-1)
     set.seed(seed)  # set a seed for reproducibility
 
@@ -91,7 +91,8 @@ print(unlist(r))
 		#Sigma <- kn*diag(factors$n) + ks*fast_ns_cov(data$phi, factors$n, length(data$phi), design$d_gridR$B, design$S, design$D2)
 		Sigma <- calc_ns_cov(tau=kn, sigma=sqrt(ks), phi=data$phi, Nr=length(data$phi), R=design$d_gridR$B, S=design$S, D2=design$D2)
 	} else if (factors$data == "ns_discrete_nugget") {
-		data$tau   <- c(1, 3, 3, 5)
+		#data$tau   <- c(1, 3, 3, 5)
+		data$tau   <- c(1, 5, 5, 20)
 		data$sigma <- sqrt(2)
 		data$phi   <- 0.05
 		Sigma <- calc_ns_cov(tau=data$tau, sigma=data$sigma, phi=data$phi, Nr=4, R=design$d_gridR$B, S=design$S, D2=design$D2)
@@ -208,7 +209,8 @@ stop("todo")
 			R=rep(1, data$n.train), Rn=NULL,
 			B=design$gridB$B[-data$which.test], Bn=design$gridB$neighbors,
     	cov.params=list(nugget=list(type="single"), psill=list(type="single"), range=list(type="single")),
-			verbose=FALSE, parallel=FALSE
+			inits=list(nugget=mean(data$tau), psill=mean(data$sigma), range=mean(data$phi)),
+			verbose=TRUE, parallel=FALSE
 		)
 
 	})
@@ -297,7 +299,7 @@ stop("todo")
 				B=(design$gridB$B[-data$which.test])[-in.h], Bn=design$gridB$neighbors,
     		cov.params=list(nugget=list(type="vary"), psill=list(type="vary"), range=list(type="vary")),
 				inits=list(nugget=init.tau, psill=init.sigma, range=init.phi),
-				verbose=FALSE, parallel=FALSE, fuse=fuse
+				verbose=TRUE, parallel=FALSE, fuse=fuse
 			)
 
 			if (fit$conv == 1) {
@@ -361,7 +363,7 @@ stop("todo")
 				B=design$gridB$B[-data$which.test], Bn=design$gridB$neighbors,
     		cov.params=list(nugget=list(type="vary"), psill=list(type="vary"), range=list(type="vary")),
 				inits=list(nugget=init.tau, psill=init.sigma, range=init.phi),
-				verbose=FALSE, parallel=FALSE, fuse=fuse
+				verbose=TRUE, parallel=FALSE, fuse=fuse
 			)
 		})
 
@@ -436,12 +438,13 @@ sim.factors <- expand.grid(
 	n=30^2  # 100 test
 )
 
-if (FALSE) {
-	options(cores=4)
+if (TRUE) {
+	options(cores=10)
 
 	# run the experiment for each combination of factors
-	res <- lapply(1:1, function(i) { #nrow(sim.factors), function(i) {
+	#res <- lapply(1:1, function(i) { #nrow(sim.factors), function(i) {
 	#res <- lapply(1:nrow(sim.factors), function(i) {
+	res <- lapply(which_exp, function(i) {
 	  print(sim.factors[i,])
 	  exp_res <- sim_exp(sim.design, sim.factors[i,], i)
 		save(exp_res, file=paste0("output/exp_",i,".RData"))

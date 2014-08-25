@@ -1,5 +1,5 @@
 # estimate parameters in NS models
-library(gstat)
+#library(gstat)
 
 "ns_estimate_all" <- function(lambda, y, S, R, Rn, B, Bn, D, D2,
 	cov.params, inits,
@@ -76,6 +76,7 @@ library(gstat)
 		sigma <- inits[["psill"]]
 		phi   <- inits[["range"]]
 	} else {
+		require(gstat)
 		# get starting values with variogram
 		points <- sample(n, min(n,1000))
 		d      <- dist(S[points,])
