@@ -48,7 +48,7 @@ if (FALSE) {
 
 if (FALSE) {
 	# fit range varying model
-	lambda <- exp(1)
+	lambda <- exp(0)
 	#starts <- list(nugget=fit.s$tau, psill=fit.s$sigma, range=rep(fit.s$phi,Nr))
 	starts <- list(nugget=rep(fit.s$tau,Nr), psill=rep(fit.s$sigma,Nr), range=rep(fit.s$phi,Nr))
 	#fit.ns <- ns_estimate_range(lambda=lambda,y=y,S=S,R=gridR$B,Rn=gridR$neighbors,B=gridB$B,Bn=gridB$neighbors,fuse=TRUE,verbose=TRUE,init.phi=starts)
@@ -57,14 +57,13 @@ if (FALSE) {
 		cov.params=list(nugget=list(type="vary"), psill=list(type="vary"), range=list(type="vary")),
 		inits=list(nugget=starts$nugget, psill=starts$psill, range=starts$range),
 		fuse=FALSE,verbose=TRUE)
-done
 }
 
-if (FALSE) {
+if (TRUE) {
 	# make plots
 	library(ggmap)
 	library(maps)
-	euro <- get_map(location=c(mean(S[,1]),mean(S[,2])), zoom=4, maptype="satellite")
+	euro <- get_map(location=c(mean(S[,1]),mean(S[,2])), zoom=3, maptype="satellite")
 
 	# data
 	fig  <- ggmap(euro) +
@@ -92,16 +91,14 @@ if (FALSE) {
 	cols <- tim.colors()
 	zlim <- range(c(fit.s$tau,fit.ns$tau))
 	zids <- seq(zlim[1],zlim[2],length=length(cols))
+	ns.cols <- sapply(fit.ns$tau, function(tau) { cols[which.min(abs(zids-tau))] })
 
-	# stationary estimate
-	pdf("pdf/anom/est_s_nugget.pdf")
+	# nugget estimate
+	pdf("pdf/anom/est_nugget.pdf")
+		par(mfrow=c(2,1))
 		plot(gridR$grid,lty=1,lwd=1.5,border="gray",cex=0.25,col=cols[which.min(abs(zids-fit.s$tau))])
 		map("world", add=TRUE, col="darkgreen")
-	graphics.off()
 
-	# nonstationary estimates
-	ns.cols <- sapply(fit.ns$tau, function(tau) { cols[which.min(abs(zids-tau))] })
-	pdf("pdf/anom/est_ns_nugget.pdf")
 		plot(gridR$grid,lty=1,lwd=1.5,border="gray",cex=0.25,col=ns.cols)
 		map("world", add=TRUE, col="darkgreen")
 	graphics.off()
@@ -110,16 +107,14 @@ if (FALSE) {
 	cols <- tim.colors()
 	zlim <- range(c(fit.s$sigma,fit.ns$sigma))
 	zids <- seq(zlim[1],zlim[2],length=length(cols))
+	ns.cols <- sapply(fit.ns$sigma, function(sigma) { cols[which.min(abs(zids-sigma))] })
 
-	# stationary estimate
-	pdf("pdf/anom/est_s_psill.pdf")
+	# partial sill estimate
+	pdf("pdf/anom/est_psill.pdf")
+		par(mfrow=c(2,1))
 		plot(gridR$grid,lty=1,lwd=1.5,border="gray",cex=0.25,col=cols[which.min(abs(zids-fit.s$sigma))])
 		map("world", add=TRUE, col="darkgreen")
-	graphics.off()
 
-	# nonstationary estimates
-	ns.cols <- sapply(fit.ns$sigma, function(sigma) { cols[which.min(abs(zids-sigma))] })
-	pdf("pdf/anom/est_ns_psill.pdf")
 		plot(gridR$grid,lty=1,lwd=1.5,border="gray",cex=0.25,col=ns.cols)
 		map("world", add=TRUE, col="darkgreen")
 	graphics.off()
@@ -128,16 +123,46 @@ if (FALSE) {
 	cols <- tim.colors()
 	zlim <- range(c(fit.s$phi,fit.ns$phi))
 	zids <- seq(zlim[1],zlim[2],length=length(cols))
+	ns.cols <- sapply(fit.ns$phi, function(phi) { cols[which.min(abs(zids-phi))] })
 
-	# stationary estimate
-	pdf("pdf/anom/est_s_range.pdf")
+	# range estimate
+	pdf("pdf/anom/est_range.pdf")
+		par(mfrow=c(2,1))
 		plot(gridR$grid,lty=1,lwd=1.5,border="gray",cex=0.25,col=cols[which.min(abs(zids-fit.s$phi))])
+		map("world", add=TRUE, col="darkgreen")
+
+		plot(gridR$grid,lty=1,lwd=1.5,border="gray",cex=0.25,col=ns.cols)
 		map("world", add=TRUE, col="darkgreen")
 	graphics.off()
 
-	# nonstationary estimates
-	ns.cols <- sapply(fit.ns$phi, function(phi) { cols[which.min(abs(zids-phi))] })
-	pdf("pdf/anom/est_ns_range.pdf")
+	# sill
+	cols <- tim.colors()
+	zlim <- range(c(fit.s$tau+fit.s$sigma^2,fit.ns$tau+fit.ns$sigma^2))
+	zids <- seq(zlim[1],zlim[2],length=length(cols))
+	ns.cols <- sapply(fit.ns$tau+fit.ns$sigma^2, function(sigma) { cols[which.min(abs(zids-sigma))] })
+
+	# sill estimate
+	pdf("pdf/anom/est_sill.pdf")
+		par(mfrow=c(2,1))
+		plot(gridR$grid,lty=1,lwd=1.5,border="gray",cex=0.25,col=cols[which.min(abs(zids-fit.s$tau-fit.s$sigma^2))])
+		map("world", add=TRUE, col="darkgreen")
+
+		plot(gridR$grid,lty=1,lwd=1.5,border="gray",cex=0.25,col=ns.cols)
+		map("world", add=TRUE, col="darkgreen")
+	graphics.off()
+
+	# psill/range ratio
+	cols <- tim.colors()
+	zlim <- range(c(fit.s$sigma^2/fit.s$phi,fit.ns$sigma^2/fit.ns$phi))
+	zids <- seq(zlim[1],zlim[2],length=length(cols))
+	ns.cols <- sapply(fit.ns$sigma^2/fit.ns$phi, function(sigma) { cols[which.min(abs(zids-sigma))] })
+
+	# psill/range estimate
+	pdf("pdf/anom/est_psill_range_ratio.pdf")
+		par(mfrow=c(2,1))
+		plot(gridR$grid,lty=1,lwd=1.5,border="gray",cex=0.25,col=cols[which.min(abs(zids-fit.s$sigma^2/fit.s$phi))])
+		map("world", add=TRUE, col="darkgreen")
+
 		plot(gridR$grid,lty=1,lwd=1.5,border="gray",cex=0.25,col=ns.cols)
 		map("world", add=TRUE, col="darkgreen")
 	graphics.off()
@@ -145,7 +170,7 @@ if (FALSE) {
 done
 }
 
-if (TRUE) { # predict on a holdout set
+if (FALSE) { # predict on a holdout set
 	cat("Holdout test\n")
 	set.seed(1983)
 	#in.h <- round(seq(1, n, len=round(0.1*n)))
@@ -161,34 +186,44 @@ if (TRUE) { # predict on a holdout set
 
 	#lambdas <- c(10000,1000,500,100,50,10,5,2,1,.5,.1)
 	#lambdas <- c(100,50,25,10,5,1,.5,.1,.05,.01)
-	#lambdas <- exp( 4:(-4) )
-	lambdas <- exp( (-4):(-7) )
+	lambdas <- exp( 4:(-4) )
+	#lambdas <- exp( (-4):(-7) )
 	err <- matrix(NA, nrow=length(lambdas)+1, ncol=4)
 
 	# fit stationary model
-	fit <- ns_estimate_range(lambda=0,y=y[-in.h],S=S[-in.h,],R=rep(1, length=n.nh),Rn=gridR$neighbors,B=gridB$B[-in.h],Bn=gridB$neighbors)
-	c_ll <- ns_cond_ll(y[-in.h], y[in.h], fit$phi, S[-in.h,], S[in.h,], rep(1, length=n.nh), rep(1, length=n.h))
-	preds <- ns_full_pred(y[-in.h], fit$phi, S[-in.h,], S[in.h,], rep(1, length=n.nh), rep(1, length=n.h))
+	#fit <- ns_estimate_range(lambda=0,y=y[-in.h],S=S[-in.h,],R=rep(1, length=n.nh),Rn=gridR$neighbors,B=gridB$B[-in.h],Bn=gridB$neighbors)
+
+	fit <- ns_estimate_all(lambda=0,y=y[-in.h],S=S[-in.h,],R=rep(1,n.nh),Rn=gridR$neighbors,B=gridB$B[-in.h],Bn=gridB$neighbors,
+		cov.params=list(nugget=list(type="single"), psill=list(type="single"), range=list(type="single")),
+		inits=list(nugget=kn, psill=sqrt(ks), range=kr),
+		verbose=TRUE)
+
+	c_ll <- ns_cond_ll(y[-in.h], y[in.h], fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], rep(1, length=n.nh), rep(1, length=n.h))
+	preds <- ns_full_pred(y[-in.h], fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], rep(1, length=n.nh), rep(1, length=n.h))
 	diffs2 <- (preds$y-y[in.h])^2
 	err[1,1] <- c_ll
 	err[1,2] <- mean(diffs2)
 	err[1,3] <- sd(diffs2)/sqrt(length(diffs2))
 	err[1,4] <- 1 - sum(diffs2)/sum( (preds$y-mean(y[in.h]))^2 )
 	print(round(err[1,],6))
-	starts <- rep(fit$phi, max(gridR$B)) + runif( max(gridR$B), 0.001, 0.01 )
+	starts <- list(nugget=rep(fit$tau,max(gridR$B)), psill=rep(fit$sigma,max(gridR$B)), range=rep(fit$phi,max(gridR$B)))
 
 	for (lambda in lambdas) {
 		try({
-			fit <- ns_estimate_range(lambda=lambda,y=y[-in.h],S=S[-in.h,],R=gridR$B[-in.h],Rn=gridR$neighbors,B=gridB$B[-in.h],Bn=gridB$neighbors,
-				fuse=TRUE,verbose=TRUE,init.phi=starts)
-			c_ll <- ns_cond_ll(y[-in.h], y[in.h], fit$phi, S[-in.h,], S[in.h,], gridR$B[-in.h], gridR$B[in.h])
-			preds <- ns_full_pred(y[-in.h], fit$phi, S[-in.h,], S[in.h,], gridR$B[-in.h], gridR$B[in.h])
+			#fit <- ns_estimate_range(lambda=lambda,y=y[-in.h],S=S[-in.h,],R=gridR$B[-in.h],Rn=gridR$neighbors,B=gridB$B[-in.h],Bn=gridB$neighbors,
+			#	fuse=TRUE,verbose=TRUE,init.phi=starts)
+			fit <- ns_estimate_all(lambda=lambda,y=y[-in.h],S=S[-in.h,],R=gridR$B[-in.h],Rn=gridR$neighbors,B=gridB$B[-in.h],Bn=gridB$neighbors,
+				cov.params=list(nugget=list(type="vary"), psill=list(type="vary"), range=list(type="vary")),
+				inits=list(nugget=starts$nugget, psill=starts$psill, range=starts$range),
+				fuse=FALSE,verbose=TRUE)
+			c_ll <- ns_cond_ll(y[-in.h], y[in.h], fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], rep(1, length=n.nh), rep(1, length=n.h))
+			preds <- ns_full_pred(y[-in.h], fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], rep(1, length=n.nh), rep(1, length=n.h))
 			diffs2 <- (preds$y-y[in.h])^2
 			err[1+which(lambdas==lambda),1] <- c_ll
 			err[1+which(lambdas==lambda),2] <- mean(diffs2)
 			err[1+which(lambdas==lambda),3] <- sd(diffs2)/sqrt(length(diffs2))
 			err[1+which(lambdas==lambda),4] <- 1 - sum(diffs2)/sum( (preds$y-mean(y[in.h]))^2 )
-			starts <- fit$phi
+			starts <- list(nugget=fit$tau, psill=fit$sigma, range=fit$phi)
 		})
 		print(round(err[1+which(lambdas==lambda),],6))
 	}

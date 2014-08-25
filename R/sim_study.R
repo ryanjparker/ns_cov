@@ -27,8 +27,8 @@ source("R/ns_estimate.R")
 	# create subregions for NS model
 	design$gridR <- create_blocks(design$S, design$Nr, queen=FALSE)
 
-	res <- mclapply(1:design$Nreps, function(i) {
-	#res <- lapply(15:design$Nreps, function(i) {
+	#res <- mclapply(1:design$Nreps, function(i) {
+	res <- lapply(1:design$Nreps, function(i) {
 		seed <- 1983 + i + design$Nreps*(which.exp-1)
     set.seed(seed)  # set a seed for reproducibility
 
@@ -91,10 +91,10 @@ print(unlist(r))
 		#Sigma <- kn*diag(factors$n) + ks*fast_ns_cov(data$phi, factors$n, length(data$phi), design$d_gridR$B, design$S, design$D2)
 		Sigma <- calc_ns_cov(tau=kn, sigma=sqrt(ks), phi=data$phi, Nr=length(data$phi), R=design$d_gridR$B, S=design$S, D2=design$D2)
 	} else if (factors$data == "ns_discrete_nugget") {
-		data$tau   <- 0.05
-		data$sigma <- sqrt(0.95)
-		data$phi   <- c(0.01, 0.10, 0.10, 0.20)
-		Sigma <- calc_ns_cov(tau=data$tau, sigma=data$sigma, phi=data$phi, Nr=length(data$phi), R=design$d_gridR$B, S=design$S, D2=design$D2)
+		data$tau   <- c(1, 3, 3, 5)
+		data$sigma <- sqrt(2)
+		data$phi   <- 0.05
+		Sigma <- calc_ns_cov(tau=data$tau, sigma=data$sigma, phi=data$phi, Nr=4, R=design$d_gridR$B, S=design$S, D2=design$D2)
 	} else if (factors$data == "ns_discrete_psill") {
 stop("todo")
 	} else if (factors$data == "ns_discrete_range") {
@@ -128,9 +128,6 @@ stop("todo")
 	y <- sapply(1:factors$Nreps, function(rep) {
 		LSigma %*% rnorm(factors$n)
 	})
-print(dim(y))
-print(str(y))
-done
 
 #pdf("pdf/gp_range_test_y.pdf"); image.plot(matrix(data$y,nrow=sqrt(factors$n))); graphics.off()
 #done
@@ -143,11 +140,11 @@ done
 	data$n.test  <- length(data$which.test)
 	data$n.train <- factors$n-data$n.test
 
-	data$y.train <- y[data$which.train]
-	data$y.test  <- y[data$which.test]
-	data$y       <- c(data$y.train, data$y.test)
+	data$y.train <- y[data$which.train,]
+	data$y.test  <- y[data$which.test,]
+	data$y       <- rbind(data$y.train, data$y.test)
 
-	# order Sigma: fit then test
+	# order Sigma: train then test
 	data$Sigma <- Sigma
 	data$Sigma[1:data$n.train,1:data$n.train] <- Sigma[data$which.train,data$which.train]
 	data$Sigma[data$n.train+1:data$n.test,data$n.train+1:data$n.test] <- Sigma[data$which.test,data$which.test]
@@ -169,22 +166,23 @@ done
 	clen <- NA
 
 	# conditional log-likelihood
-	c_ll <- ns_cond_ll(data$y.train, data$y.test, phi=NA,
+	c_ll <- ns_cond_ll(data$y.train, data$y.test, tau=NA, sigma=NA, phi=NA,
 	                   design$S[-data$which.test,], design$S[data$which.test,],
 	                   rep(1, length=data$n.train), rep(1, length=data$n.test), Sigma=data$Sigma)
 
 	# MSE of predictions
-	preds <- ns_full_pred(data$y.train, phi=NA, design$S[-data$which.test,], design$S[data$which.test,],
+	preds <- ns_full_pred(data$y.train, tau=NA, sigma=NA, phi=NA,
+	                      design$S[-data$which.test,], design$S[data$which.test,],
 	                      rep(1, length=data$n.train), rep(1, length=data$n.test), Sigma=data$Sigma)
 
-	diffs2 <- (as.vector(preds$y)-data$y.test)^2
+  diffs2 <- sapply(1:ncol(data$y.test), function(i) { (preds$y[,i]-data$y.test[,i])^2 })
 	mse <- mean(diffs2)
 
-	lo <- preds$y-preds$sd*1.96
-	hi <- preds$y+preds$sd*1.96
+	lo <- sapply(1:ncol(data$y.test), function(i) { preds$y[,i]-preds$sd*1.96 })
+	hi <- sapply(1:ncol(data$y.test), function(i) { preds$y[,i]+preds$sd*1.96 })
 
 	# coverage
-	cov <- mean(as.integer( data$y.test >= lo & data$y.test <= hi ))
+	cov <- mean(as.integer( sapply(1:ncol(data$y.test), function(i) { data$y.test[,i] >= lo & data$y.test[,i] <= hi }) ))
 
 	# PI width
 	clen <- mean(hi-lo)
@@ -194,7 +192,7 @@ done
 	list(
 		success=TRUE, elapsed=as.vector(elapsed[3]),
 		c_ll=as.vector(c_ll), mse=as.vector(mse), cov=cov, clen=clen,
-		phi=NA
+		tau=NA, sigma=NA, phi=NA
 	)
 }
 
@@ -205,12 +203,14 @@ done
 	# fit model
 	fit <- NA
 	try({
-		fit <- ns_estimate_range(
+		fit <- ns_estimate_all(
 			lambda=0, y=data$y.train, S=design$S[data$which.train,],
 			R=rep(1, data$n.train), Rn=NULL,
-			B=design$gridB$B[-data$which.test], Bn=design$gridB$neighbors, verbose=FALSE
-			#B=rep(1, length=data$n.train), Bn=cbind(1,1), verbose=FALSE
+			B=design$gridB$B[-data$which.test], Bn=design$gridB$neighbors,
+    	cov.params=list(nugget=list(type="single"), psill=list(type="single"), range=list(type="single")),
+			verbose=FALSE, parallel=FALSE
 		)
+
 	})
 
 	# see if we have a good fit
@@ -219,32 +219,37 @@ done
 		success <- FALSE
 	}
 
-	c_ll <- NA
-	mse  <- NA
-	cov  <- NA
-	clen <- NA
-	phi  <- NA
+	c_ll  <- NA
+	mse   <- NA
+	cov   <- NA
+	clen  <- NA
+	tau   <- NA
+	sigma <- NA
+	phi   <- NA
 	if (success) {
 		# evaluate fit on test set
-		phi <- fit$phi
+		tau   <- fit$tau
+		sigma <- fit$sigma
+		phi   <- fit$phi
 
 		# conditional log-likelihood
-		c_ll <- ns_cond_ll(data$y.train, data$y.test, phi,
+		c_ll <- ns_cond_ll(data$y.train, data$y.test, tau=tau, sigma=sigma, phi=phi,
 		                   design$S[-data$which.test,], design$S[data$which.test,],
 		                   rep(1, length=data$n.train), rep(1, length=data$n.test))
 
 		# MSE of predictions
-		preds <- ns_full_pred(data$y.train, phi, design$S[-data$which.test,], design$S[data$which.test,],
+		preds <- ns_full_pred(data$y.train, tau=tau, sigma=sigma, phi=phi,
+		                      design$S[-data$which.test,], design$S[data$which.test,],
 		                      rep(1, length=data$n.train), rep(1, length=data$n.test))
 
-		diffs2 <- (as.vector(preds$y)-data$y.test)^2
+	  diffs2 <- sapply(1:ncol(data$y.test), function(i) { (preds$y[,i]-data$y.test[,i])^2 })
 		mse <- mean(diffs2)
 
-		lo <- preds$y-preds$sd*1.96
-		hi <- preds$y+preds$sd*1.96
+		lo <- sapply(1:ncol(data$y.test), function(i) { preds$y[,i]-preds$sd*1.96 })
+		hi <- sapply(1:ncol(data$y.test), function(i) { preds$y[,i]+preds$sd*1.96 })
 
 		# coverage
-		cov <- mean(as.integer( data$y.test >= lo & data$y.test <= hi ))
+		cov <- mean(as.integer( sapply(1:ncol(data$y.test), function(i) { data$y.test[,i] >= lo & data$y.test[,i] <= hi }) ))
 
 		# PI width
 		clen <- mean(hi-lo)
@@ -254,18 +259,20 @@ done
 	list(
 		success=success, elapsed=as.vector(elapsed[3]),
 		c_ll=as.vector(c_ll), mse=as.vector(mse), cov=cov, clen=clen,
-		phi=phi
+		tau=tau, sigma=sigma, phi=phi
 	)
 }
 
 # non-stationary model
-"eval.ns" <- function(design, factors, data, init.phi) {
+"eval.ns" <- function(design, factors, data, init.tau, init.sigma, init.phi, fuse) {
 	t1 <- proc.time()
 
 	# which sequence of lambdas do we use to fit?
 	lambdas <- exp( 4:(-4) )
 	Nlambdas <- length(lambdas)
 	err <- rep(NA, Nlambdas)
+	taus <- vector("list", Nlambdas)
+	sigmas <- vector("list", Nlambdas)
 	phis <- vector("list", Nlambdas)
 
 	# hold out random set for choosing lambda
@@ -273,9 +280,9 @@ done
 	n.h <- length(in.h)
 	n.nh <- data$n.train-n.h
 
-	if (!missing(init.phi)) {
-		init.phi <- rep(init.phi, design$Nr)
-	}
+	init.tau   <- rep(init.tau, design$Nr)
+	init.sigma <- rep(init.sigma, design$Nr)
+	init.phi   <- rep(init.phi, design$Nr)
 
 	# find best lambda
 	for (lambda in lambdas) {
@@ -284,23 +291,27 @@ done
 
 		try({
 			# fit for this lambda
-			fit <- ns_estimate_range(
-				lambda=lambda, y=data$y.train[-in.h], S=(design$S[-data$which.test,])[-in.h,],
+			fit <- ns_estimate_all(
+				lambda=lambda, y=data$y.train[-in.h,], S=(design$S[-data$which.test,])[-in.h,],
 				R=(design$gridR$B[-data$which.test])[-in.h], Rn=design$gridR$neighbors,
 				B=(design$gridB$B[-data$which.test])[-in.h], Bn=design$gridB$neighbors,
-				#B=rep(1, length( (design$gridB$B[-data$which.test])[-in.h] )), Bn=cbind(1,1),
-				init.phi=init.phi, verbose=FALSE, fuse=TRUE
+    		cov.params=list(nugget=list(type="vary"), psill=list(type="vary"), range=list(type="vary")),
+				inits=list(nugget=init.tau, psill=init.sigma, range=init.phi),
+				verbose=FALSE, parallel=FALSE, fuse=fuse
 			)
 
 			if (fit$conv == 1) {
-				init.phi <- fit$phi
+				init.tau   <- fit$tau
+				init.sigma <- fit$sigma
+				init.phi   <- fit$phi
+				taus[[which.lambda]] <- fit$tau
+				sigmas[[which.lambda]] <- fit$sigma
 				phis[[which.lambda]] <- fit$phi
 
 				# evaluate conditional log-likelihood on holdout set
-				c_ll <- ns_cond_ll((data$y.train)[-in.h], (data$y.train)[in.h], fit$phi,
+				c_ll <- ns_cond_ll((data$y.train)[-in.h,], (data$y.train)[in.h,], fit$tau, fit$sigma, fit$phi,
 				                   (design$S[-data$which.test,])[-in.h,], (design$S[-data$which.test,])[in.h,],
 				                   (design$gridR$B[-data$which.test])[-in.h], (design$gridR$B[-data$which.test])[in.h])
-				                   #rep(1, length( (design$gridB$B[-data$which.test])[-in.h] )), rep(1, length( (design$gridR$B[-data$which.test])[in.h] )))
 
 	      err[which.lambda] <- c_ll
 			}
@@ -322,28 +333,35 @@ done
 	lambda.best <- NA
 	success <- FALSE
 
-	c_ll <- NA
-	mse  <- NA
-	cov  <- NA
-	clen <- NA
-	fit  <- NA
-	phi  <- NA
+	c_ll  <- NA
+	mse   <- NA
+	cov   <- NA
+	clen  <- NA
+	fit   <- NA
+	tau   <- NA
+	sigma <- NA
+	phi   <- NA
 
 	# did we find a good lambda?
 	if (sum(!is.na(err)) > 0) {
 		# yes!
 		which.best <- which.max(err)
 		lambda.best <- lambdas[which.best]
+		init.tau <- taus[[which.best]]
+		init.sigma <- sigmas[[which.best]]
 		init.phi <- phis[[which.best]]
 #print(lambda.best)
 #print(init.phi)
 
 		# fit model to all training data
 		try({
-			fit <- ns_estimate_range(
+			fit <- ns_estimate_all(
 				lambda=lambda.best, y=data$y.train, S=design$S[-data$which.test,],
 				R=design$gridR$B[-data$which.test], Rn=design$gridR$neighbors,
-				B=design$gridB$B[-data$which.test], Bn=design$gridB$neighbors, init.phi=init.phi, verbose=FALSE
+				B=design$gridB$B[-data$which.test], Bn=design$gridB$neighbors,
+    		cov.params=list(nugget=list(type="vary"), psill=list(type="vary"), range=list(type="vary")),
+				inits=list(nugget=init.tau, psill=init.sigma, range=init.phi),
+				verbose=FALSE, parallel=FALSE, fuse=fuse
 			)
 		})
 
@@ -355,25 +373,28 @@ done
 
 	if (success) {
 		# evaluate fit on test set
+		tau <- fit$tau
+		sigma <- fit$sigma
 		phi <- fit$phi
 
 		# conditional log-likelihood
-		c_ll <- ns_cond_ll(data$y.train, data$y.test, phi,
+		c_ll <- ns_cond_ll(data$y.train, data$y.test, tau=tau, sigma=sigma, phi=phi,
 		                   design$S[-data$which.test,], design$S[data$which.test,],
 			                 design$gridR$B[-data$which.test], design$gridR$B[data$which.test])
 
 		# MSE of predictions
-		preds <- ns_full_pred(data$y.train, phi, design$S[-data$which.test,], design$S[data$which.test,],
+		preds <- ns_full_pred(data$y.train, tau=tau, sigma=sigma, phi=phi,
+		                      design$S[-data$which.test,], design$S[data$which.test,],
 			                    design$gridR$B[-data$which.test], design$gridR$B[data$which.test])
 
-		diffs2 <- (as.vector(preds$y)-data$y.test)^2
+	  diffs2 <- sapply(1:ncol(data$y.test), function(i) { (preds$y[,i]-data$y.test[,i])^2 })
 		mse <- mean(diffs2)
 
-		lo <- preds$y-preds$sd*1.96
-		hi <- preds$y+preds$sd*1.96
+		lo <- sapply(1:ncol(data$y.test), function(i) { preds$y[,i]-preds$sd*1.96 })
+		hi <- sapply(1:ncol(data$y.test), function(i) { preds$y[,i]+preds$sd*1.96 })
 
 		# coverage
-		cov <- mean(as.integer( data$y.test >= lo & data$y.test <= hi ))
+		cov <- mean(as.integer( sapply(1:ncol(data$y.test), function(i) { data$y.test[,i] >= lo & data$y.test[,i] <= hi }) ))
 
 		# PI width
 		clen <- mean(hi-lo)
@@ -383,7 +404,7 @@ done
 	list(
 		success=success, elapsed=as.vector(elapsed[3]),
 		c_ll=as.vector(c_ll), mse=as.vector(mse), cov=cov, clen=clen,
-		lambda=log(lambda.best), phi=phi
+		lambda=log(lambda.best), tau=tau, sigma=sigma, phi=phi
 	)
 }
 
@@ -415,7 +436,7 @@ sim.factors <- expand.grid(
 	n=30^2  # 100 test
 )
 
-if (TRUE) {
+if (FALSE) {
 	options(cores=4)
 
 	# run the experiment for each combination of factors

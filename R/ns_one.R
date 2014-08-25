@@ -13,11 +13,11 @@ n <- nrow(S)
 # make range decay from east to west
 phi <- 0.2
 
-if (F) { # generate data
+if (FALSE) { # generate data
 	cat("data gen\n")
 	Sigma <- exp(-rdist(S)/phi)
 	set.seed(311)
-	y <- chol(Sigma) %*% rnorm(n)
+	y <- t(chol(Sigma)) %*% rnorm(n)
 done
 }
 

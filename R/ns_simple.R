@@ -6,32 +6,32 @@ source("R/create_blocks.R")
 source("R/ns_cov.R")
 source("R/ns_estimate.R")
 
-kn <- 0.05
-ks <- 0.25
-
 # generate data
-S <- as.matrix( expand.grid(sx <- seq(0,1,length=30), sy <- seq(0,1,length=30)) )
+#S <- as.matrix( expand.grid(sx <- seq(0,1,length=30), sy <- seq(0,1,length=30)) )
+#S <- as.matrix( expand.grid(sx <- seq(0,1,length=39), sy <- seq(0,1,length=39)) )
+#S <- as.matrix( expand.grid(sx <- seq(0,1,length=50), sy <- seq(0,1,length=50)) )
+S <- as.matrix( expand.grid(sx <- seq(0,1,length=70), sy <- seq(0,1,length=70)) )
 n <- nrow(S)
 
-phi <- c(0.1, 0.2)
+tau <- c(0.10, 0.20)
+sigma <- 1
+phi <- 0.10
 
 R1 <- which(S[,1] <  0.5)
 R2 <- which(S[,1] >= 0.5)
 
 R <- rep(1, n)
 R[R2] <- 2
+Nr <- 2
 
 if (TRUE) { # generate data
-	#Sigma <- exp(-rdist(S)/0.15)
-	#Sigma <- fast_ns_cov(0.2, n, 1, rep(1,n), S)
-	#Sigma <- fast_ns_cov(phi, n, length(unique(R)), R, S)
-	Sigma <- kn * diag(n) + ks*fast_ns_cov(phi, n, length(unique(R)), R, S)
+	Sigma <- calc_ns_cov(tau=tau, sigma=sigma, phi=phi, Nr=Nr, R=R, S=S)
+
 	set.seed(311)
-	y <- chol(Sigma) %*% rnorm(n)
+	y <- t(chol(Sigma)) %*% rnorm(n)
 
-
-	gridR <- create_blocks(S, 3^2, queen=FALSE)
-	gridB <- create_blocks(S, 3^2)
+	gridR <- create_blocks(S, 2^2, queen=FALSE)
+	gridB <- create_blocks(S, 9^2)
 
 	# holdout 100 points for prediction
 	which.pred <- round(seq(1, n, len=100))
@@ -62,17 +62,21 @@ if (TRUE) { # generate data
 
 if (TRUE) {
 
-#R/ns_estimate.R:"ns_estimate_range" <- cmpfun( function(lambda, y, S, R, Rn, B, Bn, D, D2, init.phi, verbose=FALSE) {
-
-lambdas <- exp(4:(-4)) #seq(15,0.01,len=10) #c(0.01,5,10,15,25)
-#lambdas <- 10
 #lambdas <- c(500,1000)
+lambdas <- exp(3)
+
 set.seed(1983)
 starts <- rep(0.15,max(R)) + runif(max(R),0,0.03)
 for (lambda in lambdas) {
 	lambda.f <- lambda^2/4
 	#fit <- ns_estimate_range(lambda=lambda, y=y, S=S, R=R, Rn=gridR$neighbors, B=B, Bn=gridB$neighbors, init.phi=starts, verbose=TRUE, fuse=FALSE)
-	fit <- ns_estimate_range(lambda=lambda.f, y=y, S=S, R=R, Rn=gridR$neighbors, B=B, Bn=gridB$neighbors, init.phi=starts, verbose=TRUE, fuse=TRUE)
+	#fit <- ns_estimate_range(lambda=lambda.f, y=y, S=S, R=R, Rn=gridR$neighbors, B=B, Bn=gridB$neighbors, init.phi=starts, verbose=TRUE, fuse=TRUE)
+	fit <- ns_estimate_all(lambda=lambda, y=y, S=S, R=R, Rn=gridR$neighbors, B=B, Bn=gridB$neighbors,fuse=TRUE,verbose=TRUE,
+		cov.params=list(nugget=list(type="vary"), psill=list(type="vary"), range=list(type="vary"))
+		#cov.params=list(nugget=list(type="vary"), psill=list(type="fixed",value=1), range=list(type="fixed",value=0.10))
+		#cov.params=list(nugget=list(type="fixed",value=0.15), psill=list(type="vary"), range=list(type="fixed",value=0.10))
+		#cov.params=list(nugget=list(type="fixed",value=0.15), psill=list(type="fixed",value=1), range=list(type="vary"))
+	)
 	bic <- -2*fit$ll + log(length(y))*length(unique(round(fit$phi,3)))
 	print(c(lambda,fit$ll))
 	starts <- fit$phi
