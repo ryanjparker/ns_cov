@@ -8,7 +8,7 @@ source("R/ns_cov.R")
 source("R/ns_estimate.R")
 
 # function to execte the simulation study based on given factors
-"sim_exp" <- function(design, factors, which.exp) {
+"sim_exp" <- function(design, factors, which.exp, which.part) {
 
 	# create locations on a grid
 	design$S <- as.matrix( expand.grid(seq(0,1,length=sqrt(factors$n)), seq(0,1,length=sqrt(factors$n))) )
@@ -27,8 +27,12 @@ source("R/ns_estimate.R")
 	# create subregions for NS model
 	design$gridR <- create_blocks(design$S, design$Nr, queen=FALSE)
 
-	res <- mclapply(1:design$Nreps, function(i) {
-	#res <- lapply(1:design$Nreps, function(i) {
+	exp.step <- design$Nreps/20
+	exp.start <- ((which.part-1)*exp.step+1)
+	exp.end   <- exp.start+exp.step-1
+
+	#res <- mclapply(1:design$Nreps, function(i) {
+	res <- lapply(exp.start:exp.end, function(i) {
 		seed <- 1983 + i + design$Nreps*(which.exp-1)
     set.seed(seed)  # set a seed for reproducibility
 
@@ -91,16 +95,20 @@ print(unlist(r))
 		#Sigma <- kn*diag(factors$n) + ks*fast_ns_cov(data$phi, factors$n, length(data$phi), design$d_gridR$B, design$S, design$D2)
 		Sigma <- calc_ns_cov(tau=kn, sigma=sqrt(ks), phi=data$phi, Nr=length(data$phi), R=design$d_gridR$B, S=design$S, D2=design$D2)
 	} else if (factors$data == "ns_discrete_nugget") {
-		#data$tau   <- c(1, 3, 3, 5)
 		data$tau   <- c(1, 5, 5, 20)
 		data$sigma <- sqrt(2)
 		data$phi   <- 0.05
 		Sigma <- calc_ns_cov(tau=data$tau, sigma=data$sigma, phi=data$phi, Nr=4, R=design$d_gridR$B, S=design$S, D2=design$D2)
 	} else if (factors$data == "ns_discrete_psill") {
-stop("todo")
+		data$tau   <- 1
+		data$sigma <- c(2, 5, 5, 10)
+		data$phi   <- 0.05
+		Sigma <- calc_ns_cov(tau=data$tau, sigma=data$sigma, phi=data$phi, Nr=4, R=design$d_gridR$B, S=design$S, D2=design$D2)
 	} else if (factors$data == "ns_discrete_range") {
+		data$tau   <- 0.05
+		data$sigma <- sqrt(0.95)
 		data$phi <- c(0.01, 0.10, 0.10, 0.20)
-		Sigma <- calc_ns_cov(tau=kn, sigma=sqrt(ks), phi=data$phi, Nr=length(data$phi), R=design$d_gridR$B, S=design$S, D2=design$D2)
+		Sigma <- calc_ns_cov(tau=data$tau, sigma=data$sigma, phi=data$phi, Nr=4, R=design$d_gridR$B, S=design$S, D2=design$D2)
 	} else if (factors$data == "ns_continuous") {
 		# make range decay from east to west
 		data$phi <- 0.01 + (1-design$S[,1])*0.05
@@ -429,7 +437,7 @@ sim.factors <- expand.grid(
 	# generate data from this type of model
 	#data=c("stationary","ns_discrete","ns_continuous"),
 	#data=c("ns_discrete"),
-	data=c("ns_discrete_nugget"),
+	data=c("ns_discrete_nugget","ns_discrete_psill","ns_discrete_range"),
 	# number of time replications
 	Nreps=10,
 	# amount of data to generate: half used for fit, half for test
@@ -439,15 +447,15 @@ sim.factors <- expand.grid(
 )
 
 if (TRUE) {
-	options(cores=10)
+	options(cores=1)
 
 	# run the experiment for each combination of factors
 	#res <- lapply(1:1, function(i) { #nrow(sim.factors), function(i) {
 	#res <- lapply(1:nrow(sim.factors), function(i) {
 	res <- lapply(which_exp, function(i) {
 	  print(sim.factors[i,])
-	  exp_res <- sim_exp(sim.design, sim.factors[i,], i)
-		save(exp_res, file=paste0("output/exp_",i,".RData"))
+	  exp_res <- sim_exp(sim.design, sim.factors[i,], i, which_part)
+		save(exp_res, file=paste0("output/exp_",i,"_",which_part,".RData"))
 
 print(head(exp_res))
 

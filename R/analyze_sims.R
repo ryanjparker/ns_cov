@@ -1,15 +1,26 @@
 # perform a simple analysis of sim study results
 
-for (i in 1:3) {
-	load(paste0("output/exp_",i,".RData"))
+for (i in 2:2) {
+	Nparts <- 20
+	if (Nparts > 1) {
+		cer <- data.frame()
+		for (part in 1:Nparts) {
+			load(paste0("output/exp_",i,"_",part,".RData"))
+			cer <- rbind(cer, exp_res)
+		}
+		exp_res <- cer
+	} else {
+		load(paste0("output/exp_",i,".RData"))
+	}
 
 	N <- nrow(exp_res)
 	s.good <-exp_res$s.success==TRUE
-	ns.good<-exp_res$ns.success==TRUE
-	good <- s.good&ns.good
+	nsL1.good<-exp_res$nsL1.success==TRUE
+	nsL2.good<-exp_res$nsL2.success==TRUE
+	good <- s.good&nsL1.good&nsL2.good
 
 	cat("==============\n")
-	cat("Exp=",i,", Nreps=",N,", S good=",sum(s.good),", NS good=",sum(ns.good),", Both good=",sum(good),"\n",sep="")
+	cat("Exp=",i,", Nreps=",N,", S good=",sum(s.good),", NS L1 good=",sum(nsL1.good),", NS L2 good=",sum(nsL2.good),", Both good=",sum(good),"\n",sep="")
 
 	gres <- exp_res[good,]
 	Ngood <- nrow(gres)
@@ -18,16 +29,18 @@ for (i in 1:3) {
 	cat("C LL:\n")
 	cat("O = ",mean(gres$o.c_ll),", (", min(gres$o.c_ll), ", ", max(gres$o.c_ll), ")\n",sep="")
 	cat("S = ",mean(gres$s.c_ll),", (", min(gres$s.c_ll), ", ", max(gres$s.c_ll), ")\n",sep="")
-	cat("NS = ",mean(gres$ns.c_ll),", (", min(gres$ns.c_ll), ", ", max(gres$ns.c_ll), ")\n", sep="")
-	cat("SE: O=",sd(gres$o.c_ll)/sqrt(Ngood),", S=",sd(gres$s.c_ll)/sqrt(Ngood),", NS=",sd(gres$ns.c_ll)/sqrt(Ngood),"\n",sep="")
+	cat("NS L1 = ",mean(gres$nsL1.c_ll),", (", min(gres$nsL1.c_ll), ", ", max(gres$nsL1.c_ll), ")\n", sep="")
+	cat("NS L2 = ",mean(gres$nsL2.c_ll),", (", min(gres$nsL2.c_ll), ", ", max(gres$nsL2.c_ll), ")\n", sep="")
+	cat("SE: O=",sd(gres$o.c_ll)/sqrt(Ngood),", S=",sd(gres$s.c_ll)/sqrt(Ngood),", NS L1=",sd(gres$nsL1.c_ll)/sqrt(Ngood),", NS L2=",sd(gres$nsL2.c_ll)/sqrt(Ngood),"\n",sep="")
 	#print(t.test(gres$ns.c_ll,gres$s.c_ll,paired=T))
 
 	cat("==============\n")
 	cat("MSE:\n")
 	cat("O = ",mean(gres$o.mse),", (", min(gres$o.mse), ", ", max(gres$o.mse), ")\n",sep="")
 	cat("S = ",mean(gres$s.mse),", (", min(gres$s.mse), ", ", max(gres$s.mse), ")\n",sep="")
-	cat("NS = ",mean(gres$ns.mse),", (", min(gres$ns.mse), ", ", max(gres$ns.mse), ")\n", sep="")
-	cat("SE: O=",sd(gres$o.mse)/sqrt(Ngood),", S=",sd(gres$s.mse)/sqrt(Ngood),", NS=",sd(gres$ns.mse)/sqrt(Ngood),"\n",sep="")
+	cat("NS L1 = ",mean(gres$nsL1.mse),", (", min(gres$nsL1.mse), ", ", max(gres$nsL1.mse), ")\n", sep="")
+	cat("NS L2 = ",mean(gres$nsL2.mse),", (", min(gres$nsL2.mse), ", ", max(gres$nsL2.mse), ")\n", sep="")
+	cat("SE: O=",sd(gres$o.mse)/sqrt(Ngood),", S=",sd(gres$s.mse)/sqrt(Ngood),", NS L1=",sd(gres$nsL1.mse)/sqrt(Ngood),", NS L2=",sd(gres$nsL2.mse)/sqrt(Ngood),"\n",sep="")
 	#print(t.test(gres$ns.mse,gres$s.mse,paired=T))
 	#cat("NS MSE / S MSE = ",mean(gres$ns.mse)/mean(gres$s.mse),"\n",sep="")
 	#print(t.test(gres$ns.mse/gres$s.mse))
@@ -38,12 +51,14 @@ for (i in 1:3) {
 	cat("Computing time:\n")
 	cat("O = ",mean(gres$o.elapsed),", (", min(gres$o.elapsed), ", ", max(gres$o.elapsed), ")\n",sep="")
 	cat("S = ",mean(gres$s.elapsed),", (", min(gres$s.elapsed), ", ", max(gres$s.elapsed), ")\n",sep="")
-	cat("NS = ",mean(gres$ns.elapsed)/60,", (", min(gres$ns.elapsed)/60, ", ", max(gres$ns.elapsed)/60, ")\n", sep="")
-	cat("SE: O=",sd(gres$o.elapsed)/sqrt(Ngood),", S=",sd(gres$s.elapsed)/sqrt(Ngood),", NS=",sd(gres$ns.elapsed/60)/sqrt(Ngood),"\n",sep="")
+	cat("NS L1 = ",mean(gres$nsL1.elapsed)/60,", (", min(gres$nsL1.elapsed)/60, ", ", max(gres$nsL1.elapsed)/60, ")\n", sep="")
+	cat("NS L2 = ",mean(gres$nsL2.elapsed)/60,", (", min(gres$nsL2.elapsed)/60, ", ", max(gres$nsL2.elapsed)/60, ")\n", sep="")
+	cat("SE: O=",sd(gres$o.elapsed)/sqrt(Ngood),", S=",sd(gres$s.elapsed)/sqrt(Ngood),", NS L1=",sd(gres$nsL1.elapsed)/sqrt(Ngood),", NS L2=",sd(gres$nsL2.elapsed)/sqrt(Ngood),"\n",sep="")
 	#print(t.test(gres$ns.elapsed/60,gres$s.elapsed/60,paired=T))
 
 	cat("==============\n")
 	cat("log(lambda) summary:\n")
 	#print( summary(log(gres$ns.lambda)) )
-	print( summary(gres$ns.lambda) )
+	print( summary(gres$nsL1.lambda) )
+	print( summary(gres$nsL2.lambda) )
 }
