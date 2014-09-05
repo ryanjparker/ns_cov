@@ -22,7 +22,7 @@ source("R/ns_estimate.R")
 	design$d_gridR <- create_blocks(design$S, 4, queen=FALSE)
 
 	# create blocks for BCL
-	design$gridB <- create_blocks(design$S, design$Nb)
+	design$gridB <- blocks.cluster(design$S, round( (factors$n-factors$nt)/design$Nb ) )
 
 	# create subregions for NS model
 	design$gridR <- create_blocks(design$S, design$Nr, queen=FALSE)
@@ -49,8 +49,8 @@ source("R/ns_estimate.R")
 
 			# ... non-stationary
 			#res.ns <- eval.ns(design, factors, data, res.s$phi)
-			res.nsL1 <- eval.ns(design, factors, data, res.s$tau, res.s$sigma, res.s$phi, fuse=TRUE)
-			res.nsL2 <- eval.ns(design, factors, data, res.s$tau, res.s$sigma, res.s$phi, fuse=FALSE)
+			#res.nsL1 <- eval.ns(design, factors, data, res.s$tau, res.s$sigma, res.s$phi, fuse=TRUE)
+			#res.nsL2 <- eval.ns(design, factors, data, res.s$tau, res.s$sigma, res.s$phi, fuse=FALSE)
 
 			# ... kernel-convolutions
 			#res.kc <- eval.kc(design, factors, data)
@@ -60,12 +60,12 @@ source("R/ns_estimate.R")
 			# oracle results
 			o.elapsed=res.o$elapsed, o.c_ll=res.o$c_ll, o.mse=res.o$mse, o.cov=res.o$cov, o.clen=res.o$clen,
 			# stationary results
-			s.success=res.s$success, s.elapsed=res.s$elapsed, s.c_ll=res.s$c_ll, s.mse=res.s$mse, s.cov=res.s$cov, s.clen=res.s$clen,
+			s.success=res.s$success, s.elapsed=res.s$elapsed, s.c_ll=res.s$c_ll, s.mse=res.s$mse, s.cov=res.s$cov, s.clen=res.s$clen #,
 			# non-stationary results
 			#ns.success=res.ns$success, ns.elapsed=res.ns$elapsed, ns.c_ll=res.ns$c_ll, ns.mse=res.ns$mse, ns.cov=res.ns$cov, ns.clen=res.ns$clen,
 			#ns.lambda=res.ns$lambda
-			nsL1.success=res.nsL1$success, nsL1.elapsed=res.nsL1$elapsed, nsL1.c_ll=res.nsL1$c_ll, nsL1.mse=res.nsL1$mse, nsL1.cov=res.nsL1$cov, nsL1.clen=res.nsL1$clen, nsL1.lambda=res.nsL1$lambda,
-			nsL2.success=res.nsL2$success, nsL2.elapsed=res.nsL2$elapsed, nsL2.c_ll=res.nsL2$c_ll, nsL2.mse=res.nsL2$mse, nsL2.cov=res.nsL2$cov, nsL2.clen=res.nsL2$clen, nsL2.lambda=res.nsL2$lambda
+			#nsL1.success=res.nsL1$success, nsL1.elapsed=res.nsL1$elapsed, nsL1.c_ll=res.nsL1$c_ll, nsL1.mse=res.nsL1$mse, nsL1.cov=res.nsL1$cov, nsL1.clen=res.nsL1$clen, nsL1.lambda=res.nsL1$lambda,
+			#nsL2.success=res.nsL2$success, nsL2.elapsed=res.nsL2$elapsed, nsL2.c_ll=res.nsL2$c_ll, nsL2.mse=res.nsL2$mse, nsL2.cov=res.nsL2$cov, nsL2.clen=res.nsL2$clen, nsL2.lambda=res.nsL2$lambda
     )
 #print(round(unlist(r),3))
 print(unlist(r))
@@ -95,19 +95,19 @@ print(unlist(r))
 		#Sigma <- kn*diag(factors$n) + ks*fast_ns_cov(data$phi, factors$n, length(data$phi), design$d_gridR$B, design$S, design$D2)
 		Sigma <- calc_ns_cov(tau=kn, sigma=sqrt(ks), phi=data$phi, Nr=length(data$phi), R=design$d_gridR$B, S=design$S, D2=design$D2)
 	} else if (factors$data == "ns_discrete_nugget") {
-		data$tau   <- c(1, 5, 5, 20)
-		data$sigma <- sqrt(2)
+		data$tau   <- c(0.05, 0.10, 0.10, 0.15)
+		data$sigma <- sqrt(0.95)
 		data$phi   <- 0.05
 		Sigma <- calc_ns_cov(tau=data$tau, sigma=data$sigma, phi=data$phi, Nr=4, R=design$d_gridR$B, S=design$S, D2=design$D2)
 	} else if (factors$data == "ns_discrete_psill") {
-		data$tau   <- 1
-		data$sigma <- c(2, 5, 5, 10)
+		data$tau   <- 0.05
+		data$sigma <- sqrt(c(0.95,1.90,1.90,2.85))
 		data$phi   <- 0.05
 		Sigma <- calc_ns_cov(tau=data$tau, sigma=data$sigma, phi=data$phi, Nr=4, R=design$d_gridR$B, S=design$S, D2=design$D2)
 	} else if (factors$data == "ns_discrete_range") {
 		data$tau   <- 0.05
 		data$sigma <- sqrt(0.95)
-		data$phi <- c(0.01, 0.10, 0.10, 0.20)
+		data$phi   <- c(0.05, 0.10, 0.10, 0.15)
 		Sigma <- calc_ns_cov(tau=data$tau, sigma=data$sigma, phi=data$phi, Nr=4, R=design$d_gridR$B, S=design$S, D2=design$D2)
 	} else if (factors$data == "ns_continuous") {
 		# make range decay from east to west
@@ -134,6 +134,9 @@ print(unlist(r))
 	#y <- 
 	#y <- matrix(NA, nrow=factors$n, ncol=factors$Nreps)
 	LSigma <- t(chol(Sigma))
+	X <- cbind(1, rnorm(factors$n))
+	Xb <- X %*% c(design$b0, design$b1)
+print(head(Xb))
 	y <- sapply(1:factors$Nreps, function(rep) {
 		LSigma %*% rnorm(factors$n)
 	})
@@ -143,7 +146,7 @@ print(unlist(r))
 
 	# split into training and test sets
 	#data$which.test <- sample.int(factors$n, floor(factors$n/2))
-	data$which.test <- sample.int(factors$n, 100)
+	data$which.test <- sample.int(factors$n, factors$nt)
 	data$which.train <- (1:factors$n)[-data$which.test]
 
 	data$n.test  <- length(data$which.test)
@@ -429,8 +432,10 @@ sim.design <- list(
 	Nreps=100,
 	# number of regions in NS model
 	Nr=4^2,
-	# number of blocks in BCL
-	Nb=5^2
+	# number of obs per block in BCL
+	Nb=50,
+	# coefficients
+	b0=0, b1=1
 )
 
 sim.factors <- expand.grid(
@@ -442,8 +447,9 @@ sim.factors <- expand.grid(
 	Nreps=10,
 	# amount of data to generate: half used for fit, half for test
 	#n=45^2
-	#n=39^2  # 500 test
-	n=30^2  # 100 test
+	n=39^2,
+	nt=500  # 500 test
+	#n=30^2  # 100 test
 )
 
 if (TRUE) {

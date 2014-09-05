@@ -1,12 +1,13 @@
 # estimate parameters in NS models
 #library(gstat)
 
-"ns_estimate_all" <- function(lambda, y, S, R, Rn, B, Bn, D, D2,
+"ns_estimate_all" <- function(lambda, y, X, S, R, Rn, B, Bn, D, D2,
 	cov.params, inits,
 	fuse=FALSE, verbose=FALSE, all=FALSE, parallel=TRUE
 ) {
 	# estimates NS parameters with penalty lambda
 	#  y: observed data
+	#  X: model matrix
 	#  S: spatial locations
 	#  R: subregion memberships
 	# Rn: subregion neighbors
@@ -29,6 +30,7 @@
 	#####################################################################
 
 	y <- as.matrix(y)
+	X <- as.matrix(X)
 
 	# does our response have replications?
 	Nreps <- ncol(y)

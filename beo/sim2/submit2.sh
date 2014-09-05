@@ -1,5 +1,6 @@
 #!/bin/bash
 
+rm *.out
 bwsubmit r sim2_1.R
 bwsubmit r sim2_2.R
 bwsubmit r sim2_3.R

@@ -1,6 +1,6 @@
 # perform a simple analysis of sim study results
 
-for (i in 2:2) {
+for (i in 1:1) {
 	Nparts <- 20
 	if (Nparts > 1) {
 		cer <- data.frame()
@@ -46,6 +46,22 @@ for (i in 2:2) {
 	#print(t.test(gres$ns.mse/gres$s.mse))
 	#cat("S MSE / NS MSE = ",mean(gres$s.mse)/mean(gres$ns.mse),"\n",sep="")
 	#print(t.test(gres$s.mse/gres$ns.mse))
+
+	cat("==============\n")
+	cat("COV:\n")
+	cat("O = ",mean(gres$o.cov),", (", min(gres$o.cov), ", ", max(gres$o.cov), ")\n",sep="")
+	cat("S = ",mean(gres$s.cov),", (", min(gres$s.cov), ", ", max(gres$s.cov), ")\n",sep="")
+	cat("NS L1 = ",mean(gres$nsL1.cov),", (", min(gres$nsL1.cov), ", ", max(gres$nsL1.cov), ")\n", sep="")
+	cat("NS L2 = ",mean(gres$nsL2.cov),", (", min(gres$nsL2.cov), ", ", max(gres$nsL2.cov), ")\n", sep="")
+	cat("SE: O=",sd(gres$o.cov)/sqrt(Ngood),", S=",sd(gres$s.cov)/sqrt(Ngood),", NS L1=",sd(gres$nsL1.cov)/sqrt(Ngood),", NS L2=",sd(gres$nsL2.cov)/sqrt(Ngood),"\n",sep="")
+
+	cat("==============\n")
+	cat("PI LEN:\n")
+	cat("O = ",mean(gres$o.clen),", (", min(gres$o.clen), ", ", max(gres$o.clen), ")\n",sep="")
+	cat("S = ",mean(gres$s.clen),", (", min(gres$s.clen), ", ", max(gres$s.clen), ")\n",sep="")
+	cat("NS L1 = ",mean(gres$nsL1.clen),", (", min(gres$nsL1.clen), ", ", max(gres$nsL1.clen), ")\n", sep="")
+	cat("NS L2 = ",mean(gres$nsL2.clen),", (", min(gres$nsL2.clen), ", ", max(gres$nsL2.clen), ")\n", sep="")
+	cat("SE: O=",sd(gres$o.clen)/sqrt(Ngood),", S=",sd(gres$s.clen)/sqrt(Ngood),", NS L1=",sd(gres$nsL1.clen)/sqrt(Ngood),", NS L2=",sd(gres$nsL2.clen)/sqrt(Ngood),"\n",sep="")
 
 	cat("==============\n")
 	cat("Computing time:\n")
