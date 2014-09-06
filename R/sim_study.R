@@ -64,7 +64,7 @@ source("R/ns_estimate.R")
 			#res.kc <- eval.kc(design, factors, data)
 
 		# return results
-		r <- c(list(seed=seed, n=factors$n), oret, sret, nsL1ret)
+		r <- c(list(seed=seed, n=factors$n), oret, sret, nsL1ret, nsL2ret)
 		#r <- list(seed=seed, n=factors$n,
 			# oracle results
 			#o.elapsed=res.o$elapsed, o.c_ll=res.o$c_ll, o.mse=res.o$mse, o.cov=res.o$cov, o.clen=res.o$clen #,
@@ -289,12 +289,12 @@ print(round(unlist(r),3))
 		mse.phi   <- mean( (phi-data$phi)^2 )
 
 		# conditional log-likelihood
-		c_ll <- with(data, ns_cond_ll(X.train, X.test, y.train, y.test, beta=beta, tau=tau, sigma=sigma, phi=phi,
+		c_ll <- with(data, ns_cond_ll(X.train, X.test, y.train, y.test, beta=fit$beta, tau=fit$tau, sigma=fit$sigma, phi=fit$phi,
 		                   design$S[-which.test,], design$S[which.test,],
 		                   rep(1, length=n.train), rep(1, length=n.test)) )
 
 		# MSE of predictions
-		preds <- with(data, ns_full_pred(X.train, X.test, y.train, beta=beta, tau=tau, sigma=sigma, phi=phi,
+		preds <- with(data, ns_full_pred(X.train, X.test, y.train, beta=fit$beta, tau=fit$tau, sigma=fit$sigma, phi=fit$phi,
 		                      design$S[-which.test,], design$S[which.test,],
 		                      rep(1, length=n.train), rep(1, length=n.test)) )
 
@@ -451,12 +451,12 @@ print(round(unlist(r),3))
 		mse.phi   <- mean( (phi-data$phi)^2 )
 
 		# conditional log-likelihood
-		c_ll <- with(data, ns_cond_ll(X.train, X.test, y.train, y.test, beta=beta, tau=tau, sigma=sigma, phi=phi,
+		c_ll <- with(data, ns_cond_ll(X.train, X.test, y.train, y.test, beta=fit$beta, tau=fit$tau, sigma=fit$sigma, phi=fit$phi,
 		                   design$S[-which.test,], design$S[which.test,],
 			                 design$gridR$B[-which.test], design$gridR$B[which.test]) )
 
 		# MSE of predictions
-		preds <- with(data, ns_full_pred(X.train, X.test, y.train, beta=beta, tau=tau, sigma=sigma, phi=phi,
+		preds <- with(data, ns_full_pred(X.train, X.test, y.train, beta=fit$beta, tau=fit$tau, sigma=fit$sigma, phi=fit$phi,
 		                      design$S[-which.test,], design$S[which.test,],
 			                    design$gridR$B[-which.test], design$gridR$B[which.test]) )
 
@@ -508,8 +508,8 @@ sim.factors <- expand.grid(
 	# number of time replications
 	Nreps=10,
 	# amount of data to generate
-	#n=23^2, nt=100
-	n=39^2, nt=500
+	n=23^2, nt=100
+	#n=39^2, nt=500
 )
 
 if (TRUE) {
