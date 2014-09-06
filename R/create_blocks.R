@@ -12,6 +12,12 @@ library(deldir)
 	neighbors <- c()
 	snb <- sqrt(nblocks)
 
+	if (nblocks == 1) {
+		B <- rep(1, n)
+		neighbors <- matrix(1, nrow=1, ncol=2)
+		return( list(B=B, neighbors=neighbors) )
+	}
+
 	# ensure that nblocks is an integer squared
 	if (snb != round(snb)) {
 		stop("Number of blocks (nblocks) must be an integer squared")
