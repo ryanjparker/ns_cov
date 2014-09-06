@@ -508,8 +508,8 @@ sim.factors <- expand.grid(
 	# number of time replications
 	Nreps=10,
 	# amount of data to generate
-	n=23^2, nt=100
-	#n=39^2, nt=500
+	#n=23^2, nt=100
+	n=39^2, nt=500
 )
 
 if (TRUE) {
