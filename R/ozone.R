@@ -1,7 +1,9 @@
 # fit penalized model to ozone data
 
 library(fields)
+library(gstat)
 library(MASS)
+
 source("R/create_blocks.R")
 source("R/ns_cov.R")
 source("R/ns_estimate.R")
@@ -21,8 +23,13 @@ dat.slr <- list(
 fit.slr <- lm(y~cmaq, data=dat.slr)
 
 # data for NS model
+X <- array(1, dim=c(n, ncol(Y), 2))
+X[,,1] <- 1
+X[,,2] <- CMAQ[index,][keep,]
+
 dat.ns <- list(
-	y=matrix( fit.slr$residuals, nrow=length(keep), ncol=ncol(Y) ),
+	#y=matrix( fit.slr$residuals, nrow=length(keep), ncol=ncol(Y) ),
+	y=Y[keep,], X=X,
 	S=cbind(x[s[keep,1]], y[s[keep,2]])
 )
 
@@ -74,14 +81,15 @@ if (FALSE) {
 	# fit stationary model
 	#fit.s <- ns_estimate_range(lambda=0,y=y,S=S,R=rep(1,n),Rn=gridR$neighbors,B=gridB$B,Bn=gridB$neighbors,verbose=TRUE,init.phi=v.fit[2,"range"])
 	fit.s <- with(dat.ns,
-		ns_estimate_all(lambda=0,y=y[,1:31],S=S,R=rep(1,n),Rn=gridR$neighbors,B=gridB$B,Bn=gridB$neighbors,
+		ns_estimate_all(lambda=0,y=y[,1:31], X=X, S=S,R=rep(1,n),Rn=gridR$neighbors,B=gridB$B,Bn=gridB$neighbors,
 			#cov.params=list(nugget=list(type="fixed", value=kn), psill=list(type="fixed", value=sqrt(ks)), range=list(type="single")),
 			#cov.params=list(nugget=list(type="single"), psill=list(type="fixed", value=sqrt(ks)), range=list(type="single")),
 			cov.params=list(nugget=list(type="single"), psill=list(type="single"), range=list(type="single")),
 			inits=list(nugget=kn, psill=sqrt(ks), range=kr),
-			verbose=TRUE)
+			verbose=TRUE, all=TRUE, parallel=TRUE)
 	)
 
+done
 }
 
 if (FALSE) {
@@ -90,14 +98,15 @@ if (FALSE) {
 	#starts <- list(nugget=fit.s$tau, psill=fit.s$sigma, range=rep(fit.s$phi,Nr))
 	starts <- list(nugget=rep(fit.s$tau,Nr), psill=rep(fit.s$sigma,Nr), range=rep(fit.s$phi,Nr))
 	#fit.ns <- ns_estimate_range(lambda=lambda,y=y,S=S,R=gridR$B,Rn=gridR$neighbors,B=gridB$B,Bn=gridB$neighbors,fuse=TRUE,verbose=TRUE,init.phi=starts)
-	fit.ns <- with(dat.ns, ns_estimate_all(lambda=lambda,y=y[,1:31],S=S,R=gridR$B,Rn=gridR$neighbors,B=gridB$B,Bn=gridB$neighbors,
+	fit.ns <- with(dat.ns, ns_estimate_all(lambda=lambda,y=y[,1:31],X=X,S=S,R=gridR$B,Rn=gridR$neighbors,B=gridB$B,Bn=gridB$neighbors,
 		#cov.params=list(nugget=list(type="single"), psill=list(type="single"), range=list(type="vary")),
 		cov.params=list(nugget=list(type="vary"), psill=list(type="vary"), range=list(type="vary")),
 		inits=list(nugget=starts$nugget, psill=starts$psill, range=starts$range),
-		fuse=TRUE,verbose=TRUE,all=FALSE) )
+		fuse=TRUE,verbose=TRUE,all=FALSE,parallel=TRUE) )
+done
 }
 
-if (TRUE) {
+if (FALSE) {
 	# make plots
 	library(maps)
 
@@ -384,52 +393,66 @@ if (TRUE) { # predict on a holdout set
 
 	#lambdas <- c(10000,1000,500,100,50,10,5,2,1,.5,.1)
 	#lambdas <- c(100,50,25,10,5,1,.5,.1,.05,.01)
-	#lambdas <- exp( 4:(-4) )
+	lambdas <- exp( 4:(-4) )
 	#lambdas <- exp( c(6,5.5,5,4.5) )
 	#lambdas <- exp( 6:2 )
-	lambdas <- exp( 4:1 )
+	#lambdas <- exp( 4:1 )
 	#lambdas <- exp( (-4):(-7) )
-	err <- matrix(NA, nrow=length(lambdas)+1, ncol=4)
-
-	# fit stationary model
-	#fit <- ns_estimate_range(lambda=0,y=y[-in.h],S=S[-in.h,],R=rep(1, length=n.nh),Rn=gridR$neighbors,B=gridB$B[-in.h],Bn=gridB$neighbors)
+	err <- matrix(NA, nrow=2*length(lambdas)+1, ncol=4)
 
 	y <- dat.ns$y
 	S <- dat.ns$S
+	X <- dat.ns$X
 
-	fit <- ns_estimate_all(lambda=0,y=y[-in.h,],S=S[-in.h,],R=rep(1,n.nh),Rn=gridR$neighbors,B=gridB$B[-in.h],Bn=gridB$neighbors,
+	# fit stationary model
+	fit <- ns_estimate_all(lambda=0,y=y[-in.h,],X=X[-in.h,,],S=S[-in.h,],R=rep(1,n.nh),Rn=gridR$neighbors,B=gridB$B[-in.h],Bn=gridB$neighbors,
 		cov.params=list(nugget=list(type="single"), psill=list(type="single"), range=list(type="single")),
 		inits=list(nugget=kn, psill=sqrt(ks), range=kr),
-		verbose=TRUE)
+		verbose=TRUE,parallel=TRUE)
 
-	c_ll <- ns_cond_ll(y[-in.h,], y[in.h,], fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], rep(1, length=n.nh), rep(1, length=n.h))
-	preds <- ns_full_pred(y[-in.h,], fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], rep(1, length=n.nh), rep(1, length=n.h))
+	c_ll <- ns_cond_ll(X[-in.h,,], X[in.h,,], y[-in.h,], y[in.h,], fit$beta, fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], rep(1, length=n.nh), rep(1, length=n.h))
+	preds <- ns_full_pred(X[-in.h,,], X[in.h,,], y[-in.h,], fit$beta, fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], rep(1, length=n.nh), rep(1, length=n.h))
 	diffs2 <- sapply(1:ncol(y), function(i) { (preds$y[,i]-y[in.h,i])^2 })
 	err[1,1] <- c_ll
 	err[1,2] <- mean(diffs2)
 	err[1,3] <- sd(diffs2)/sqrt(length(diffs2))
-	err[1,4] <- 1 - sum(diffs2)/sum( (preds$y-mean(y[in.h,1]))^2 )
+	err[1,4] <- 1 - sum(diffs2)/sum( (preds$y-mean(y[in.h,]))^2 )
 	print(round(err[1,],6))
-	starts <- list(nugget=rep(fit$tau,max(gridR$B)), psill=rep(fit$sigma,max(gridR$B)), range=rep(fit$phi,max(gridR$B)))
+	starts.L1 <- starts.L2 <- list(nugget=rep(fit$tau,max(gridR$B)), psill=rep(fit$sigma,max(gridR$B)), range=rep(fit$phi,max(gridR$B)))
 
 	for (lambda in lambdas) {
 		try({
-			#fit <- ns_estimate_range(lambda=lambda,y=y[-in.h],S=S[-in.h,],R=gridR$B[-in.h],Rn=gridR$neighbors,B=gridB$B[-in.h],Bn=gridB$neighbors,
-			#	fuse=TRUE,verbose=TRUE,init.phi=starts)
-			fit <- ns_estimate_all(lambda=lambda,y=y[-in.h,],S=S[-in.h,],R=gridR$B[-in.h],Rn=gridR$neighbors,B=gridB$B[-in.h],Bn=gridB$neighbors,
+			fit <- ns_estimate_all(lambda=lambda,y=y[-in.h,],X=X[-in.h,,],S=S[-in.h,],R=gridR$B[-in.h],Rn=gridR$neighbors,B=gridB$B[-in.h],Bn=gridB$neighbors,
 				cov.params=list(nugget=list(type="vary"), psill=list(type="vary"), range=list(type="vary")),
-				inits=list(nugget=starts$nugget, psill=starts$psill, range=starts$range),
+				inits=list(nugget=starts.L1$nugget, psill=starts.L1$psill, range=starts.L1$range),
 				fuse=TRUE,verbose=TRUE,all=FALSE)
-			c_ll <- ns_cond_ll(y[-in.h,], y[in.h,], fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], gridR$B[-in.h], gridR$B[in.h])
-			preds <- ns_full_pred(y[-in.h,], fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], gridR$B[-in.h], gridR$B[in.h])
+			c_ll <- ns_cond_ll(X[-in.h,,], X[in.h,,], y[-in.h,], y[in.h,], fit$beta, fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], gridR$B[-in.h], gridR$B[in.h])
+			preds <- ns_full_pred(X[-in.h,,], X[in.h,,], y[-in.h,], fit$beta, fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], gridR$B[-in.h], gridR$B[in.h])
 			diffs2 <- sapply(1:ncol(y), function(i) { (preds$y[,i]-y[in.h,i])^2 })
 			err[1+which(lambdas==lambda),1] <- c_ll
 			err[1+which(lambdas==lambda),2] <- mean(diffs2)
 			err[1+which(lambdas==lambda),3] <- sd(diffs2)/sqrt(length(diffs2))
-			err[1+which(lambdas==lambda),4] <- 1 - sum(diffs2)/sum( (preds$y-mean(y[in.h,1]))^2 )
-			starts <- list(nugget=fit$tau, psill=fit$sigma, range=fit$phi)
+			err[1+which(lambdas==lambda),4] <- 1 - sum(diffs2)/sum( (preds$y-mean(y[in.h,]))^2 )
+			starts.L1 <- list(nugget=fit$tau, psill=fit$sigma, range=fit$phi)
 		})
 		print(round(err[1+which(lambdas==lambda),],6))
+
+		try({
+			fit <- ns_estimate_all(lambda=lambda,y=y[-in.h,],X=X[-in.h,,],S=S[-in.h,],R=gridR$B[-in.h],Rn=gridR$neighbors,B=gridB$B[-in.h],Bn=gridB$neighbors,
+				cov.params=list(nugget=list(type="vary"), psill=list(type="vary"), range=list(type="vary")),
+				inits=list(nugget=starts.L2$nugget, psill=starts.L2$psill, range=starts.L2$range),
+				fuse=FALSE,verbose=TRUE,all=FALSE)
+			c_ll <- ns_cond_ll(X[-in.h,,], X[in.h,,], y[-in.h,], y[in.h,], fit$beta, fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], gridR$B[-in.h], gridR$B[in.h])
+			preds <- ns_full_pred(X[-in.h,,], X[in.h,,], y[-in.h,], fit$beta, fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], gridR$B[-in.h], gridR$B[in.h])
+			diffs2 <- sapply(1:ncol(y), function(i) { (preds$y[,i]-y[in.h,i])^2 })
+			err[1+length(lambdas)+which(lambdas==lambda),1] <- c_ll
+			err[1+length(lambdas)+which(lambdas==lambda),2] <- mean(diffs2)
+			err[1+length(lambdas)+which(lambdas==lambda),3] <- sd(diffs2)/sqrt(length(diffs2))
+			err[1+length(lambdas)+which(lambdas==lambda),4] <- 1 - sum(diffs2)/sum( (preds$y-mean(y[in.h,]))^2 )
+			starts.L2 <- list(nugget=fit$tau, psill=fit$sigma, range=fit$phi)
+		})
+		print(round(err[1+length(lambdas)+which(lambdas==lambda),],6))
+
 	}
 
 	print(round(cbind(c(Inf,lambdas),err),6))

@@ -1,5 +1,6 @@
 # estimate parameters in NS models
 #library(gstat)
+library(parallel)
 
 "ns_estimate_all" <- function(lambda, y, X, S, R, Rn, B, Bn, D, D2,
 	cov.params, inits,
@@ -30,7 +31,6 @@
 	#####################################################################
 
 	y <- as.matrix(y)
-	X <- as.matrix(X)
 
 	# does our response have replications?
 	Nreps <- ncol(y)
@@ -49,7 +49,17 @@
 
 	# number of observations
 	n      <- nrow(y)
-	p      <- ncol(X)
+
+	if (!missing(X)) {
+		hasX <- TRUE
+		#X <- as.matrix(X)
+		p <- dim(X)[3]
+		seq.p <- 1:p
+		seq.p2 <- 1:(p^2)
+	} else {
+		hasX <- FALSE
+		X <- matrix(1, nrow=n, ncol=1)
+	}
 
 	# setup parameters
 	beta              <- NA
@@ -129,8 +139,6 @@
 
 	# things for estimation
 	nH <- Nr*(Nr+1)/2
-	seq.p <- 1:p
-	seq.p2 <- 1:(p^2)
 	seq.Nr <- 1:Nr
 	seq.Nr2 <- 1:(Nr^2)
 	seq.NrH <- 1:nH
@@ -239,23 +247,41 @@
 	}
 
 	# function to update beta based on theta
-	A <- matrix(0, nrow=p, ncol=p)
-	b <- matrix(0, nrow=p, ncol=1)
+	if (hasX) {
+		A <- matrix(0, nrow=p, ncol=p)
+		b <- matrix(0, nrow=p, ncol=1)
+	}
 
 	"update_beta" <- function(tau, sigma, phi) {
-		# build A and b
-		A[seq.p2] <<- 0
-		b[seq.p]  <<- 0
+		bres <- par_lapply(1:nrow(Bn), function(irow) {
+			# build A and b
+			A[seq.p2] <- 0
+			b[seq.p]  <- 0
 
-		apply(Bn, 1, function(row) {
+			row <- Bn[irow,]
+
 			if (row[1] == row[2]) in.pair <- which(B==row[1]) # full likelihood
 			else                  in.pair <- c(which(B==row[1]),  which(B==row[2]))
 
 			Sigma    <- calc_ns_cov(tau=tau, sigma=sigma, phi=phi, Nr=Nr, R=R[in.pair], D2=D2[in.pair,in.pair])
 			invSigma <- chol2inv(chol(Sigma))
 
-			A <<- A + t(X[in.pair,]) %*% invSigma %*% X[in.pair,]
-			b <<- b + t(X[in.pair,]) %*% invSigma %*% y[in.pair]
+#   b = inv( sum_t t(X_t) inv(Sigma) X_t ) [ sum_t t(X_t) inv(Sigma) y_t ]
+			sapply(1:ncol(y), function(t) {
+				A <<- A+t(X[in.pair,t,]) %*% invSigma %*% X[in.pair,t,]
+				b <<- b+t(X[in.pair,t,]) %*% invSigma %*% y[in.pair,t]
+			})
+
+			list(A=A, b=b)
+		})
+
+		A[seq.p2] <- 0
+		b[seq.p]  <- 0
+
+		# gather results
+		sapply(1:length(bres), function(i) {
+			A <<- A+bres[[i]]$A
+			b <<- b+bres[[i]]$b
 		})
 
 		chol2inv(chol(A)) %*% b
@@ -275,8 +301,9 @@
 
 			Sigma <- calc_ns_cov(tau=tau, sigma=sigma, phi=phi, Nr=Nr, R=R[in.pair], D2=D2[in.pair,in.pair])
 			invSigma <- chol2inv(chol(Sigma))
-			Xb <- X[in.pair,] %*% beta
-			q <- apply(y, 2, function(z) { invSigma %*% (z[in.pair]-Xb) })
+			#Xb <- X[in.pair,] %*% beta
+			#q <- apply(y, 2, function(z) { invSigma %*% (z[in.pair]-Xb) })
+			q <- do.call("cbind", lapply(1:ncol(y), function(t) { invSigma %*% (y[in.pair,t]-X[in.pair,t,] %*% beta) }) )
 
 			# compute the Ws
 			for (r in 1:Ntau) {
@@ -455,8 +482,9 @@
 
 			Sigma <- calc_ns_cov(tau=tau, sigma=sigma, phi=phi, Nr=Nr, R=R[in.pair], D2=D2[in.pair,in.pair])
 			invSigma <- chol2inv(chol(Sigma))
-			Xb <- X[in.pair,] %*% beta
-			q <- apply(y, 2, function(z) { invSigma %*% (z[in.pair]-Xb) })
+			#Xb <- X[in.pair,] %*% beta
+			#q <- apply(y, 2, function(z) { invSigma %*% (z[in.pair]-Xb) })
+			q <- do.call("cbind", lapply(1:ncol(y), function(t) { invSigma %*% (y[in.pair,t]-X[in.pair,t,] %*% beta) }) )
 
 			# compute the Ws
 			for (r in 1:Ntau) {
@@ -576,8 +604,9 @@
 
 			Sigma <- calc_ns_cov(tau=tau, sigma=sigma, phi=phi, Nr=Nr, R=R[in.pair], D2=D2[in.pair,in.pair])
 			invSigma <- chol2inv(chol(Sigma))
-			Xb <- X[in.pair,] %*% beta
-			q <- apply(y, 2, function(z) { invSigma %*% (z[in.pair]-Xb) })
+			#Xb <- X[in.pair,] %*% beta
+			#q <- apply(y, 2, function(z) { invSigma %*% (z[in.pair]-Xb) })
+			q <- do.call("cbind", lapply(1:ncol(y), function(t) { invSigma %*% (y[in.pair,t]-X[in.pair,t,] %*% beta) }) )
 
 			# compute the Ws
 			for (r in 1:Nsigma) {
@@ -701,8 +730,9 @@
 
 			Sigma <- calc_ns_cov(tau=tau, sigma=sigma, phi=phi, Nr=Nr, R=R[in.pair], D2=D2[in.pair,in.pair])
 			invSigma <- chol2inv(chol(Sigma))
-			Xb <- X[in.pair,] %*% beta
-			q <- apply(y, 2, function(z) { invSigma %*% (z[in.pair]-Xb) })
+			#Xb <- X[in.pair,] %*% beta
+			#q <- apply(y, 2, function(z) { invSigma %*% (z[in.pair]-Xb) })
+			q <- do.call("cbind", lapply(1:ncol(y), function(t) { invSigma %*% (y[in.pair,t]-X[in.pair,t,] %*% beta) }) )
 
 			# compute the Ws
 			for (r in 1:Nphi) {
@@ -826,7 +856,10 @@
 	}
 
 	"loglik" <- function(beta, tau, sigma, phi) {
-		ll <- sum( apply(Bn, 1, function(row) {
+		#ll <- sum( apply(Bn, 1, function(row) {
+		ll <- sum( unlist( par_lapply(1:nrow(Bn), function(irow) {
+			row <- Bn[irow,]
+
 			in.b1 <- sum(B==row[1])
 			in.b2 <- sum(B==row[2])
 
@@ -838,12 +871,12 @@
 			cholSigma <- chol(Sigma)
 			invSigma <- chol2inv(cholSigma)
 
-			mu <- X[in.pair,] %*% beta
+			#mu <- X[in.pair,] %*% beta
 
 			#-sum(log(diag(cholSigma))) -0.5 * t(y[in.pair]) %*% invSigma %*% y[in.pair]
 			#-Nreps*sum(log(diag(cholSigma))) -0.5 * sum(apply(y, 2, function(z) { t(z[in.pair]) %*% invSigma %*% z[in.pair] }))
-			-Nreps*sum(log(diag(cholSigma))) -0.5 * sum(apply(y, 2, function(z) { t(z[in.pair]-mu) %*% invSigma %*% (z[in.pair]-mu) }))
-		}) )
+			-Nreps*sum(log(diag(cholSigma))) -0.5 * sum(sapply(1:ncol(y), function(t) { mu <- X[in.pair,t,] %*% beta; t(y[in.pair,t]-mu) %*% invSigma %*% (y[in.pair,t]-mu) }))
+		}) ))
 	}
 
 	"penalty" <- function(ltau, lsigma, lphi) {
@@ -865,7 +898,7 @@
 		}
 	}
 
-	"show_iter" <- function(iter, pll, ll, tau, sigma, phi) {
+	"show_iter" <- function(iter, pll, ll, beta, tau, sigma, phi) {
 		cat(
 			paste0("iter=",iter,
 				" ; pll: ",round(pll,2),"; ll: ",round(ll,2),"\n",
@@ -897,14 +930,14 @@
 	}
 
 	# get initial beta
-  beta <- update_beta(tau, sigma, phi)
+  if (hasX) beta <- update_beta(tau, sigma, phi) else beta <- matrix(0, nrow=1, ncol=1)
 	ll <- loglik(beta, tau, sigma, phi)
 	pll <- ll -penalty(ltau, lsigma, lphi)
 
 	# estimate params
 	for (iter in 1:maxIter) {
 		prev.ll     <- ll    ; prev.pll    <- pll
-		prev.beta   <- beta
+		if (hasX) prev.beta   <- beta
 		prev.tau    <- tau   ; prev.ltau   <- ltau
 		prev.sigma  <- sigma ; prev.lsigma <- lsigma
 		prev.phi    <- phi   ; prev.lphi   <- lphi
@@ -972,8 +1005,10 @@
 			}
 		}
 
-		# update beta
-  	beta <- update_beta(tau, sigma, phi)
+		if (hasX) {
+			# update beta
+  		beta <- update_beta(tau, sigma, phi)
+		}
 
 		# compute log-likelihood
 		ll <- loglik(beta, tau, sigma, phi)
@@ -985,7 +1020,7 @@
 		}
 
 		if (verbose & iter %% 10 == 0) {
-			show_iter(iter, pll, ll, tau, sigma, phi)
+			show_iter(iter, pll, ll, beta, tau, sigma, phi)
 		}
 
 		# have we converged?
@@ -994,7 +1029,7 @@
 		if ( abs(pll - prev.pll)/(1 + abs(pll)) <= tol || max( abs(test.parms$new-test.parms$prev)/(1+abs(test.parms$new)) ) <= tol ) {
 			if (verbose) {
 				cat("Converged at iteration",iter,"\n")
-				show_iter(iter, pll, ll, tau, sigma, phi)
+				show_iter(iter, pll, ll, beta, tau, sigma, phi)
 			}
 			break
 		}
@@ -1491,10 +1526,11 @@ done
 	}
 
 	# get the predictions
-	mu.fit  <- Xfit %*% beta
-	mu.new  <- Xnew %*% beta
+	#mu.fit  <- Xfit %*% beta
+	#mu.new  <- Xnew %*% beta
 	C <- Sigma[nFit+1:nNew,1:nFit] %*% chol2inv(chol(Sigma[1:nFit,1:nFit]))
-	y_0 <- apply(y, 2, function(z) { mu.new + C %*% (z-mu.fit) })
+	#y_0 <- apply(y, 2, function(z) { mu.new + C %*% (z-mu.fit) })
+	y_0  <- do.call("cbind", lapply(1:ncol(y), function(t) { Xnew[,t,] %*% beta + C %*% (y[,t]-Xfit[,t,] %*% beta) }) )
 	if (Nreps == 1) y_0 <- as.vector(y_0)
 
 	c_Sigma    <- Sigma[nFit+1:nNew,nFit+1:nNew] - C %*% Sigma[1:nFit,nFit+1:nNew]
@@ -1535,9 +1571,10 @@ done
 	C <- Sigma[nFit+1:nNew,1:nFit] %*% chol2inv(chol(Sigma[1:nFit,1:nFit]))
 
 	# conditional mean and covariance
-	mu.fit  <- Xfit %*% beta
-	mu.new  <- Xnew %*% beta
-	c_mu    <- apply(yfit, 2, function(z) { mu.new + C %*% (z-mu.fit) })
+	#mu.fit  <- Xfit %*% beta
+	#mu.new  <- Xnew %*% beta
+	#c_mu    <- apply(yfit, 2, function(z) { mu.new + C %*% (z-mu.fit) })
+	c_mu    <- do.call("cbind", lapply(1:ncol(yfit), function(t) { Xnew[,t,] %*% beta + C %*% (yfit[,t]-Xfit[,t,] %*% beta) }) )
 	c_Sigma <- Sigma[nFit+1:nNew,nFit+1:nNew] - C %*% Sigma[1:nFit,nFit+1:nNew]
 
 	c_cholSigma <- chol(c_Sigma)

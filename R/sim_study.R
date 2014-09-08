@@ -27,11 +27,12 @@ source("R/ns_estimate.R")
 	# create subregions for NS model
 	design$gridR <- create_blocks(design$S, design$Nr, queen=FALSE)
 
-	exp.step <- design$Nreps/20
+	exp.step  <- design$Nreps/20
 	exp.start <- ((which.part-1)*exp.step+1)
 	exp.end   <- exp.start+exp.step-1
 
 	#res <- mclapply(1:design$Nreps, function(i) {
+	#res <- mclapply(exp.start:exp.end, function(i) {
 	res <- lapply(exp.start:exp.end, function(i) {
 		seed <- 1983 + i + design$Nreps*(which.exp-1)
     set.seed(seed)  # set a seed for reproducibility
@@ -54,11 +55,11 @@ source("R/ns_estimate.R")
 			#res.ns <- eval.ns(design, factors, data, res.s$phi)
 			res.nsL1 <- eval.ns(design, factors, data, res.s$tau, res.s$sigma, res.s$phi, fuse=TRUE)
 			nsL1ret <- with(res.nsL1, list(nsL1.success=success, nsL1.elapsed=elapsed, nsL1.b0=b0, nsL1.b1=b1, nsL1.mse.tau=mse.tau,
-				nsL1.mse.sigma=mse.sigma, nsL1.mse.phi=mse.phi, nsL1.c_ll=c_ll, nsL1.mse=mse, nsL1.cov=cov, nsL1.clen=clen))
+				nsL1.mse.sigma=mse.sigma, nsL1.mse.phi=mse.phi, nsL1.c_ll=c_ll, nsL1.mse=mse, nsL1.cov=cov, nsL1.clen=clen, nsL1.lambda=lambda))
 
 			res.nsL2 <- eval.ns(design, factors, data, res.s$tau, res.s$sigma, res.s$phi, fuse=FALSE)
 			nsL2ret <- with(res.nsL2, list(nsL2.success=success, nsL2.elapsed=elapsed, nsL2.b0=b0, nsL2.b1=b1, nsL2.mse.tau=mse.tau,
-				nsL2.mse.sigma=mse.sigma, nsL2.mse.phi=mse.phi, nsL2.c_ll=c_ll, nsL2.mse=mse, nsL2.cov=cov, nsL2.clen=clen))
+				nsL2.mse.sigma=mse.sigma, nsL2.mse.phi=mse.phi, nsL2.c_ll=c_ll, nsL2.mse=mse, nsL2.cov=cov, nsL2.clen=clen, nsL2.lambda=lambda))
 
 			# ... kernel-convolutions
 			#res.kc <- eval.kc(design, factors, data)
@@ -104,19 +105,38 @@ print(round(unlist(r),3))
 		#Sigma <- kn*diag(factors$n) + ks*fast_ns_cov(data$phi, factors$n, length(data$phi), design$d_gridR$B, design$S, design$D2)
 		Sigma <- calc_ns_cov(tau=kn, sigma=sqrt(ks), phi=data$phi, Nr=length(data$phi), R=design$d_gridR$B, S=design$S, D2=design$D2)
 	} else if (factors$data == "ns_discrete_nugget") {
-		data$tau   <- c(0.05, 0.10, 0.10, 0.15)
-		data$sigma <- sqrt(0.95)
+		#data$tau   <- c(0.05, 0.10, 0.10, 0.15)
+		#data$tau   <- c(0.05, 1.05, 1.05, 2.05)
+		#data$sigma <- sqrt(0.95)
+		#data$phi   <- 0.05
+		data$tau   <- c(2/3, 2/4, 2/4, 2/5)
+		data$sigma <- 1
 		data$phi   <- 0.05
 		Sigma <- calc_ns_cov(tau=data$tau, sigma=data$sigma, phi=data$phi, Nr=4, R=design$d_gridR$B, S=design$S, D2=design$D2)
 	} else if (factors$data == "ns_discrete_psill") {
 		data$tau   <- 0.05
-		data$sigma <- sqrt(c(0.95,1.90,1.90,2.85))
+		data$sigma <- sqrt(c(0.95,1.95,1.95,2.95))
 		data$phi   <- 0.05
 		Sigma <- calc_ns_cov(tau=data$tau, sigma=data$sigma, phi=data$phi, Nr=4, R=design$d_gridR$B, S=design$S, D2=design$D2)
 	} else if (factors$data == "ns_discrete_range") {
 		data$tau   <- 0.05
 		data$sigma <- sqrt(0.95)
 		data$phi   <- c(0.05, 0.10, 0.10, 0.15)
+		Sigma <- calc_ns_cov(tau=data$tau, sigma=data$sigma, phi=data$phi, Nr=4, R=design$d_gridR$B, S=design$S, D2=design$D2)
+	} else if (factors$data == "ns_discrete_nugget_short") {
+		data$tau   <- c(2/3, 2/4, 2/4, 2/5)
+		data$sigma <- 1
+		data$phi   <- 0.10
+		Sigma <- calc_ns_cov(tau=data$tau, sigma=data$sigma, phi=data$phi, Nr=4, R=design$d_gridR$B, S=design$S, D2=design$D2)
+	} else if (factors$data == "ns_discrete_nugget_med") {
+		data$tau   <- c(2/3, 2/4, 2/4, 2/5)
+		data$sigma <- 1
+		data$phi   <- 0.25
+		Sigma <- calc_ns_cov(tau=data$tau, sigma=data$sigma, phi=data$phi, Nr=4, R=design$d_gridR$B, S=design$S, D2=design$D2)
+	} else if (factors$data == "ns_discrete_nugget_long") {
+		data$tau   <- c(2/3, 2/4, 2/4, 2/5)
+		data$sigma <- 1
+		data$phi   <- 0.50
 		Sigma <- calc_ns_cov(tau=data$tau, sigma=data$sigma, phi=data$phi, Nr=4, R=design$d_gridR$B, S=design$S, D2=design$D2)
 	} else if (factors$data == "ns_continuous") {
 		# make range decay from east to west
@@ -143,10 +163,12 @@ print(round(unlist(r),3))
 	#y <- 
 	#y <- matrix(NA, nrow=factors$n, ncol=factors$Nreps)
 	LSigma <- t(chol(Sigma))
-	X <- cbind(1, rnorm(factors$n))
-	Xb <- X %*% c(design$b0, design$b1)
+	#X <- cbind(1, rnorm(factors$n))
+	#Xb <- X %*% c(design$b0, design$b1)
+	X <- array(1, dim=c(factors$n,factors$Nreps,2))
+	X[,,2] <- rnorm(factors$n*factors$Nreps)
 	y <- sapply(1:factors$Nreps, function(rep) {
-		Xb + LSigma %*% rnorm(factors$n)
+		X[,rep,] %*% c(design$b0, design$b1) + LSigma %*% rnorm(factors$n)
 	})
 
 #pdf("pdf/gp_range_test_y.pdf"); image.plot(matrix(data$y,nrow=sqrt(factors$n))); graphics.off()
@@ -160,9 +182,12 @@ print(round(unlist(r),3))
 	data$n.test  <- length(data$which.test)
 	data$n.train <- factors$n-data$n.test
 
-	data$X.train <- X[data$which.train,]
-	data$X.test  <- X[data$which.test,]
-	data$X       <- rbind(data$X.train, data$X.test)
+	data$X.train <- X[data$which.train,,]
+	data$X.test  <- X[data$which.test,,]
+	#data$X       <- rbind(data$X.train, data$X.test)
+	data$X       <- X
+	data$X[1:data$n.train,,] <- data$X.train
+	data$X[data$n.train+1:data$n.test,,] <- data$X.test
 
 	data$y.train <- y[data$which.train,]
 	data$y.test  <- y[data$which.test,]
@@ -194,9 +219,20 @@ print(round(unlist(r),3))
 	clen <- NA
 
 	# estimate beta
+#		b = inv( sum_t t(X_t) inv(Sigma) X_t ) [ sum_t t(X_t) inv(Sigma) y_t ]
 	b <- with(data, {
-		chol2inv(chol( t(X.train) %*% invSigma.train %*% X.train )) %*% t(X.train) %*% invSigma.train %*% rowMeans(y.train)
+#		chol2inv(chol( t(X.train) %*% invSigma.train %*% X.train )) %*% t(X.train) %*% invSigma.train %*% rowMeans(y.train)
+		A <- Reduce('+', lapply(1:ncol(y.train), function(t) {
+			t(X.train[,t,]) %*% invSigma.train %*% X.train[,t,]
+		}) )
+
+		b <- Reduce('+', lapply(1:ncol(y.train), function(t) {
+			t(X.train[,t,]) %*% invSigma.train %*% y.train[,t]
+		}) )
+
+		chol2inv(chol(A)) %*% b
 	})
+
 	b0 <- b[1]
 	b1 <- b[2]
 
@@ -249,7 +285,7 @@ print(round(unlist(r),3))
 			B=design$gridB$B[-which.test], Bn=design$gridB$neighbors,
     	cov.params=list(nugget=list(type="single"), psill=list(type="single"), range=list(type="single")),
 			inits=list(nugget=mean(tau), psill=mean(sigma), range=mean(phi)),
-			verbose=TRUE, parallel=FALSE
+			verbose=TRUE, parallel=FALSE, all=TRUE
 		) )
 
 	})
@@ -350,12 +386,12 @@ print(round(unlist(r),3))
 		try({
 			# fit for this lambda
 			fit <- with(data, ns_estimate_all(
-				lambda=lambda, y=y.train[-in.h,], X=X.train[-in.h,], S=(design$S[-which.test,])[-in.h,],
+				lambda=lambda, y=y.train[-in.h,], X=X.train[-in.h,,], S=(design$S[-which.test,])[-in.h,],
 				R=(design$gridR$B[-which.test])[-in.h], Rn=design$gridR$neighbors,
 				B=(design$gridB$B[-which.test])[-in.h], Bn=design$gridB$neighbors,
     		cov.params=list(nugget=list(type="vary"), psill=list(type="vary"), range=list(type="vary")),
 				inits=list(nugget=init.tau, psill=init.sigma, range=init.phi),
-				verbose=TRUE, parallel=FALSE, fuse=fuse
+				verbose=TRUE, parallel=FALSE, fuse=fuse, all=FALSE
 			) )
 
 			if (fit$conv == 1) {
@@ -367,7 +403,7 @@ print(round(unlist(r),3))
 				phis[[which.lambda]] <- fit$phi
 
 				# evaluate conditional log-likelihood on holdout set
-				c_ll <- with(data, ns_cond_ll(X.train[-in.h,], X.train[in.h,], y.train[-in.h,], y.train[in.h,],
+				c_ll <- with(data, ns_cond_ll(X.train[-in.h,,], X.train[in.h,,], y.train[-in.h,], y.train[in.h,],
 				                   fit$beta, fit$tau, fit$sigma, fit$phi,
 				                   (design$S[-which.test,])[-in.h,], (design$S[-which.test,])[in.h,],
 				                   (design$gridR$B[-which.test])[-in.h], (design$gridR$B[-which.test])[in.h]) )
@@ -446,9 +482,14 @@ print(round(unlist(r),3))
 		b0 <- beta[1]
 		b1 <- beta[2]
 
-		mse.tau   <- mean( (tau-data$tau)^2 )
-		mse.sigma <- mean( (sigma-data$sigma)^2 )
-		mse.phi   <- mean( (phi-data$phi)^2 )
+		if (length(data$tau) == 1) mse.tau   <- mean( (tau-data$tau)^2 )
+		else mse.tau   <- mean( (tau-data$tau[c(1,1,2,2,1,1,2,2,3,3,4,4,3,3,4,4)])^2 )
+
+		if (length(data$sigma) == 1) mse.sigma   <- mean( (sigma-data$sigma)^2 )
+		else mse.sigma   <- mean( (sigma-data$sigma[c(1,1,2,2,1,1,2,2,3,3,4,4,3,3,4,4)])^2 )
+
+		if (length(data$phi) == 1) mse.phi   <- mean( (phi-data$phi)^2 )
+		else mse.phi   <- mean( (phi-data$phi[c(1,1,2,2,1,1,2,2,3,3,4,4,3,3,4,4)])^2 )
 
 		# conditional log-likelihood
 		c_ll <- with(data, ns_cond_ll(X.train, X.test, y.train, y.test, beta=fit$beta, tau=fit$tau, sigma=fit$sigma, phi=fit$phi,
@@ -504,12 +545,13 @@ sim.factors <- expand.grid(
 	# generate data from this type of model
 	#data=c("stationary","ns_discrete","ns_continuous"),
 	#data=c("ns_discrete"),
-	data=c("ns_discrete_nugget","ns_discrete_psill","ns_discrete_range"),
+	#data=c("ns_discrete_nugget","ns_discrete_psill","ns_discrete_range"),
+	data=c("ns_discrete_nugget_short","ns_discrete_nugget_med","ns_discrete_nugget_long"),
 	# number of time replications
 	Nreps=10,
 	# amount of data to generate
-	#n=23^2, nt=100
-	n=39^2, nt=500
+	n=23^2, nt=100
+	#n=39^2, nt=500
 )
 
 if (TRUE) {
