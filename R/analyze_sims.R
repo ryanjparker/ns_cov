@@ -1,6 +1,6 @@
 # perform a simple analysis of sim study results
 
-for (i in 1:1) {
+for (i in 3:3) {
 	Nparts <- 20
 	if (Nparts > 1) {
 		cer <- data.frame()
@@ -46,6 +46,22 @@ for (i in 1:1) {
 	#print(t.test(gres$ns.mse/gres$s.mse))
 	#cat("S MSE / NS MSE = ",mean(gres$s.mse)/mean(gres$ns.mse),"\n",sep="")
 	#print(t.test(gres$s.mse/gres$ns.mse))
+
+	cat("==============\n")
+	cat("b0:\n")
+	cat("O = ",mean(gres$o.b0),", (", min(gres$o.b0), ", ", max(gres$o.b0), ")\n",sep="")
+	cat("S = ",mean(gres$s.b0),", (", min(gres$s.b0), ", ", max(gres$s.b0), ")\n",sep="")
+	cat("NS L1 = ",mean(gres$nsL1.b0),", (", min(gres$nsL1.b0), ", ", max(gres$nsL1.b0), ")\n", sep="")
+	cat("NS L2 = ",mean(gres$nsL2.b0),", (", min(gres$nsL2.b0), ", ", max(gres$nsL2.b0), ")\n", sep="")
+	cat("SE: O=",sd(gres$o.b0)/sqrt(Ngood),", S=",sd(gres$s.b0)/sqrt(Ngood),", NS L1=",sd(gres$nsL1.b0)/sqrt(Ngood),", NS L2=",sd(gres$nsL2.b0)/sqrt(Ngood),"\n",sep="")
+
+	cat("==============\n")
+	cat("b1:\n")
+	cat("O = ",mean(gres$o.b1),", (", min(gres$o.b1), ", ", max(gres$o.b1), ")\n",sep="")
+	cat("S = ",mean(gres$s.b1),", (", min(gres$s.b1), ", ", max(gres$s.b1), ")\n",sep="")
+	cat("NS L1 = ",mean(gres$nsL1.b1),", (", min(gres$nsL1.b1), ", ", max(gres$nsL1.b1), ")\n", sep="")
+	cat("NS L2 = ",mean(gres$nsL2.b1),", (", min(gres$nsL2.b1), ", ", max(gres$nsL2.b1), ")\n", sep="")
+	cat("SE: O=",sd(gres$o.b1)/sqrt(Ngood),", S=",sd(gres$s.b1)/sqrt(Ngood),", NS L1=",sd(gres$nsL1.b1)/sqrt(Ngood),", NS L2=",sd(gres$nsL2.b1)/sqrt(Ngood),"\n",sep="")
 
 	cat("==============\n")
 	cat("COV:\n")

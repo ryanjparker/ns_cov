@@ -105,17 +105,18 @@ print(round(unlist(r),3))
 		#Sigma <- kn*diag(factors$n) + ks*fast_ns_cov(data$phi, factors$n, length(data$phi), design$d_gridR$B, design$S, design$D2)
 		Sigma <- calc_ns_cov(tau=kn, sigma=sqrt(ks), phi=data$phi, Nr=length(data$phi), R=design$d_gridR$B, S=design$S, D2=design$D2)
 	} else if (factors$data == "ns_discrete_nugget") {
-		#data$tau   <- c(0.05, 0.10, 0.10, 0.15)
+		data$tau   <- c(0.05, 0.10, 0.10, 0.15)
 		#data$tau   <- c(0.05, 1.05, 1.05, 2.05)
 		#data$sigma <- sqrt(0.95)
 		#data$phi   <- 0.05
-		data$tau   <- c(2/3, 2/4, 2/4, 2/5)
+		#data$tau   <- c(2/3, 2/4, 2/4, 2/5)
 		data$sigma <- 1
 		data$phi   <- 0.05
 		Sigma <- calc_ns_cov(tau=data$tau, sigma=data$sigma, phi=data$phi, Nr=4, R=design$d_gridR$B, S=design$S, D2=design$D2)
 	} else if (factors$data == "ns_discrete_psill") {
 		data$tau   <- 0.05
-		data$sigma <- sqrt(c(0.95,1.95,1.95,2.95))
+		data$sigma <- sqrt(c(.95,1.90,1.90,2.85))
+		#data$sigma <- sqrt(c(0.95,1.95,1.95,2.95))
 		data$phi   <- 0.05
 		Sigma <- calc_ns_cov(tau=data$tau, sigma=data$sigma, phi=data$phi, Nr=4, R=design$d_gridR$B, S=design$S, D2=design$D2)
 	} else if (factors$data == "ns_discrete_range") {
@@ -545,13 +546,13 @@ sim.factors <- expand.grid(
 	# generate data from this type of model
 	#data=c("stationary","ns_discrete","ns_continuous"),
 	#data=c("ns_discrete"),
-	#data=c("ns_discrete_nugget","ns_discrete_psill","ns_discrete_range"),
-	data=c("ns_discrete_nugget_short","ns_discrete_nugget_med","ns_discrete_nugget_long"),
+	data=c("ns_discrete_nugget","ns_discrete_psill","ns_discrete_range"),
+	#data=c("ns_discrete_nugget_short","ns_discrete_nugget_med","ns_discrete_nugget_long"),
 	# number of time replications
 	Nreps=10,
 	# amount of data to generate
-	n=23^2, nt=100
-	#n=39^2, nt=500
+	#n=23^2, nt=100
+	n=39^2, nt=500
 )
 
 if (TRUE) {
