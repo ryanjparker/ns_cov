@@ -34,6 +34,7 @@ dat.ns <- list(
 )
 
 options(cores=4)
+options(mc.cores=4)
 
 # create grid for params and BCL
 #gridR <- create_blocks(dat.ns$S, 5^2, queen=FALSE)

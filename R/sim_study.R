@@ -27,13 +27,13 @@ source("R/ns_estimate.R")
 	# create subregions for NS model
 	design$gridR <- create_blocks(design$S, design$Nr, queen=FALSE)
 
-	exp.step  <- design$Nreps/20
+	exp.step  <- design$Nreps #/20
 	exp.start <- ((which.part-1)*exp.step+1)
 	exp.end   <- exp.start+exp.step-1
 
 	#res <- mclapply(1:design$Nreps, function(i) {
-	#res <- mclapply(exp.start:exp.end, function(i) {
-	res <- lapply(exp.start:exp.end, function(i) {
+	res <- mclapply(exp.start:exp.end, function(i) {
+	#res <- lapply(exp.start:exp.end, function(i) {
 		seed <- 1983 + i + design$Nreps*(which.exp-1)
     set.seed(seed)  # set a seed for reproducibility
 
@@ -44,22 +44,25 @@ source("R/ns_estimate.R")
 
 			# ... oracle
 			res.o  <- eval.o(design, factors, data)
-			oret <- with(res.o, list(o.elapsed=elapsed, o.b0=b0, o.b1=b1, o.c_ll=c_ll, o.mse=mse, o.cov=cov, o.clen=clen))
+			oret <- with(res.o, list(o.elapsed=elapsed, o.b0=b0, o.b1=b1, o.b0.cov=b0.cov, o.b1.cov=b1.cov, o.b0.clen=b0.clen, o.b1.clen=b1.clen, o.c_ll=c_ll, o.mse=mse, o.cov=cov, o.clen=clen))
 
 			# ... stationary
 			res.s  <- eval.s(design, factors, data)
-			sret <- with(res.s, list(s.success=success, s.elapsed=elapsed, s.b0=b0, s.b1=b1, s.mse.tau=mse.tau,
-				s.mse.sigma=mse.sigma, s.mse.phi=mse.phi, s.c_ll=c_ll, s.mse=mse, s.cov=cov, s.clen=clen))
+			sret <- with(res.s, list(s.success=success, s.elapsed=elapsed,
+				s.b0=b0, s.b1=b1, s.b0.cov=b0.cov, s.b1.cov=b1.cov, s.b0.clen=b0.clen, s.b1.clen=b1.clen,
+				s.mse.tau=mse.tau, s.mse.sigma=mse.sigma, s.mse.phi=mse.phi, s.c_ll=c_ll, s.mse=mse, s.cov=cov, s.clen=clen))
 
 			# ... non-stationary
 			#res.ns <- eval.ns(design, factors, data, res.s$phi)
 			res.nsL1 <- eval.ns(design, factors, data, res.s$tau, res.s$sigma, res.s$phi, fuse=TRUE)
-			nsL1ret <- with(res.nsL1, list(nsL1.success=success, nsL1.elapsed=elapsed, nsL1.b0=b0, nsL1.b1=b1, nsL1.mse.tau=mse.tau,
-				nsL1.mse.sigma=mse.sigma, nsL1.mse.phi=mse.phi, nsL1.c_ll=c_ll, nsL1.mse=mse, nsL1.cov=cov, nsL1.clen=clen, nsL1.lambda=lambda))
+			nsL1ret <- with(res.nsL1, list(nsL1.success=success, nsL1.elapsed=elapsed,
+				nsL1.b0=b0, nsL1.b1=b1, nsL1.b0.cov=b0.cov, nsL1.b1.cov=b1.cov, nsL1.b0.clen=b0.clen, nsL1.b1.clen=b1.clen,
+				nsL1.mse.tau=mse.tau, nsL1.mse.sigma=mse.sigma, nsL1.mse.phi=mse.phi, nsL1.c_ll=c_ll, nsL1.mse=mse, nsL1.cov=cov, nsL1.clen=clen, nsL1.lambda=lambda))
 
 			res.nsL2 <- eval.ns(design, factors, data, res.s$tau, res.s$sigma, res.s$phi, fuse=FALSE)
-			nsL2ret <- with(res.nsL2, list(nsL2.success=success, nsL2.elapsed=elapsed, nsL2.b0=b0, nsL2.b1=b1, nsL2.mse.tau=mse.tau,
-				nsL2.mse.sigma=mse.sigma, nsL2.mse.phi=mse.phi, nsL2.c_ll=c_ll, nsL2.mse=mse, nsL2.cov=cov, nsL2.clen=clen, nsL2.lambda=lambda))
+			nsL2ret <- with(res.nsL2, list(nsL2.success=success, nsL2.elapsed=elapsed,
+				nsL2.b0=b0, nsL2.b1=b1, nsL2.b0.cov=b0.cov, nsL2.b1.cov=b1.cov, nsL2.b0.clen=b0.clen, nsL2.b1.clen=b1.clen,
+				nsL2.mse.tau=mse.tau, nsL2.mse.sigma=mse.sigma, nsL2.mse.phi=mse.phi, nsL2.c_ll=c_ll, nsL2.mse=mse, nsL2.cov=cov, nsL2.clen=clen, nsL2.lambda=lambda))
 
 			# ... kernel-convolutions
 			#res.kc <- eval.kc(design, factors, data)
@@ -107,6 +110,7 @@ print(round(unlist(r),3))
 	} else if (factors$data == "ns_discrete_nugget") {
 		data$tau   <- c(0.05, 0.10, 0.10, 0.15)
 		#data$tau   <- c(0.05, 1.05, 1.05, 2.05)
+		#data$tau   <- c(0.05, 0.5, 0.5, 1.0)
 		#data$sigma <- sqrt(0.95)
 		#data$phi   <- 0.05
 		#data$tau   <- c(2/3, 2/4, 2/4, 2/5)
@@ -161,15 +165,16 @@ print(round(unlist(r),3))
 
 #cat("Generating y\n")
 	# generate response
+	data$b <- c(design$b0, design$b1)
 	#y <- 
 	#y <- matrix(NA, nrow=factors$n, ncol=factors$Nreps)
 	LSigma <- t(chol(Sigma))
 	#X <- cbind(1, rnorm(factors$n))
-	#Xb <- X %*% c(design$b0, design$b1)
+	#Xb <- X %*% data$b
 	X <- array(1, dim=c(factors$n,factors$Nreps,2))
 	X[,,2] <- rnorm(factors$n*factors$Nreps)
 	y <- sapply(1:factors$Nreps, function(rep) {
-		X[,rep,] %*% c(design$b0, design$b1) + LSigma %*% rnorm(factors$n)
+		X[,rep,] %*% data$b + LSigma %*% rnorm(factors$n)
 	})
 
 #pdf("pdf/gp_range_test_y.pdf"); image.plot(matrix(data$y,nrow=sqrt(factors$n))); graphics.off()
@@ -221,7 +226,7 @@ print(round(unlist(r),3))
 
 	# estimate beta
 #		b = inv( sum_t t(X_t) inv(Sigma) X_t ) [ sum_t t(X_t) inv(Sigma) y_t ]
-	b <- with(data, {
+	bres <- with(data, {
 #		chol2inv(chol( t(X.train) %*% invSigma.train %*% X.train )) %*% t(X.train) %*% invSigma.train %*% rowMeans(y.train)
 		A <- Reduce('+', lapply(1:ncol(y.train), function(t) {
 			t(X.train[,t,]) %*% invSigma.train %*% X.train[,t,]
@@ -231,11 +236,25 @@ print(round(unlist(r),3))
 			t(X.train[,t,]) %*% invSigma.train %*% y.train[,t]
 		}) )
 
-		chol2inv(chol(A)) %*% b
+		bSigma <- chol2inv(chol(A))
+
+		list(b=bSigma %*% b, bSigma=bSigma)
 	})
 
+	b <- bres$b
 	b0 <- b[1]
 	b1 <- b[2]
+
+	b.se   <- sqrt(diag(bres$bSigma))
+	b.lo   <- b - b.se*1.96
+	b.hi   <- b + b.se*1.96
+	b.cov  <- as.integer( data$b >= b.lo & data$b <= b.hi )
+	b.clen <- as.vector(b.hi-b.lo)
+#print(round(b,4))
+#print(round(b.lo,4))
+#print(round(b.hi,4))
+#print(b.cov)
+#print(b.clen)
 
 	# conditional log-likelihood
 	c_ll <- with(data, ns_cond_ll(X.train, X.test, y.train, y.test, beta=b, tau=NA, sigma=NA, phi=NA,
@@ -267,7 +286,7 @@ print(round(unlist(r),3))
 
 	list(
 		success=TRUE, elapsed=as.vector(elapsed[3]),
-		b0=b0, b1=b1,
+		b0=b0, b1=b1, b0.cov=b.cov[1], b1.cov=b.cov[2], b0.clen=b.clen[1], b1.clen=b.clen[2],
 		c_ll=as.vector(c_ll), mse=as.vector(mse), cov=cov, clen=clen,
 		tau=NA, sigma=NA, phi=NA
 	)
@@ -318,8 +337,33 @@ print(round(unlist(r),3))
 		sigma <- fit$sigma
 		phi   <- fit$phi
 
+		# compute fitted covariance
+		hat.Sigma    <- calc_ns_cov(tau=tau, sigma=sigma, phi=phi, Nr=1, R=rep(1, length=data$n.train), S=design$S[-data$which.test,])
+		hat.invSigma <- chol2inv(chol(hat.Sigma))
+
+		bres <- with(data, {
+			A <- Reduce('+', lapply(1:ncol(y.train), function(t) {
+				t(X.train[,t,]) %*% hat.invSigma %*% X.train[,t,]
+			}) )
+
+			bSigma <- chol2inv(chol(A))
+
+			list(bSigma=bSigma)
+		})
+
 		b0 <- beta[1]
 		b1 <- beta[2]
+
+		b.se   <- sqrt(diag(bres$bSigma))
+		b.lo   <- beta - b.se*1.96
+		b.hi   <- beta + b.se*1.96
+		b.cov  <- as.integer( data$b >= b.lo & data$b <= b.hi )
+		b.clen <- as.vector(b.hi-b.lo)
+#print(round(beta,4))
+#print(round(b.lo,4))
+#print(round(b.hi,4))
+#print(b.cov)
+#print(b.clen)
 
 		mse.tau   <- mean( (tau-data$tau)^2 )
 		mse.sigma <- mean( (sigma-data$sigma)^2 )
@@ -351,7 +395,7 @@ print(round(unlist(r),3))
 
 	list(
 		success=success, elapsed=as.vector(elapsed[3]),
-		b0=b0, b1=b1,
+		b0=b0, b1=b1, b0.cov=b.cov[1], b1.cov=b.cov[2], b0.clen=b.clen[1], b1.clen=b.clen[2],
 		mse.tau=mse.tau, mse.sigma=mse.sigma, mse.phi=mse.phi,
 		c_ll=as.vector(c_ll), mse=as.vector(mse), cov=cov, clen=clen,
 		tau=tau, sigma=sigma, phi=phi
@@ -480,8 +524,30 @@ print(round(unlist(r),3))
 		sigma <- fit$sigma
 		phi   <- fit$phi
 
+		# compute fitted covariance
+		hat.Sigma    <- calc_ns_cov(tau=tau, sigma=sigma, phi=phi, Nr=design$Nr, R=design$gridR$B[-data$which.test], S=design$S[-data$which.test,])
+		hat.invSigma <- chol2inv(chol(hat.Sigma))
+
+		bres <- with(data, {
+			A <- Reduce('+', lapply(1:ncol(y.train), function(t) {
+				t(X.train[,t,]) %*% hat.invSigma %*% X.train[,t,]
+			}) )
+
+			bSigma <- chol2inv(chol(A))
+
+			list(bSigma=bSigma)
+		})
+
 		b0 <- beta[1]
 		b1 <- beta[2]
+
+		b.se   <- sqrt(diag(bres$bSigma))
+		b.lo   <- beta - b.se*1.96
+		b.hi   <- beta + b.se*1.96
+		b.cov  <- as.integer( data$b >= b.lo & data$b <= b.hi )
+		b.clen <- as.vector(b.hi-b.lo)
+#print(round(beta,4))
+#print(round(b.lo,4))
 
 		if (length(data$tau) == 1) mse.tau   <- mean( (tau-data$tau)^2 )
 		else mse.tau   <- mean( (tau-data$tau[c(1,1,2,2,1,1,2,2,3,3,4,4,3,3,4,4)])^2 )
@@ -518,7 +584,7 @@ print(round(unlist(r),3))
 
 	list(
 		success=success, elapsed=as.vector(elapsed[3]),
-		b0=b0, b1=b1,
+		b0=b0, b1=b1, b0.cov=b.cov[1], b1.cov=b.cov[2], b0.clen=b.clen[1], b1.clen=b.clen[2],
 		mse.tau=mse.tau, mse.sigma=mse.sigma, mse.phi=mse.phi,
 		c_ll=as.vector(c_ll), mse=as.vector(mse), cov=cov, clen=clen,
 		lambda=log(lambda.best), tau=tau, sigma=sigma, phi=phi
@@ -551,12 +617,13 @@ sim.factors <- expand.grid(
 	# number of time replications
 	Nreps=10,
 	# amount of data to generate
-	#n=23^2, nt=100
-	n=39^2, nt=500
+	n=23^2, nt=100
+	#n=39^2, nt=500
 )
 
 if (TRUE) {
-	options(cores=1)
+	options(cores=4)
+	options(mc.cores=4)
 
 	# run the experiment for each combination of factors
 	#res <- lapply(1:1, function(i) { #nrow(sim.factors), function(i) {
