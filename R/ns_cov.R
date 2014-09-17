@@ -131,6 +131,21 @@ if (FALSE) {
 	calc_ns_cov_Rcpp(as.vector(tau), as.vector(sigma), as.vector(phi), as.integer(Nr), as.vector(R-1), as.matrix(D2))
 }
 
+# - Assumes diagonal Omega(s_i) with varying phi
+"calc_ns_cov_2phi" <- function(tau, sigma, phi1, phi2, Nr, R, S) {
+	if (missing(S)) stop("calc_ns_cov_2phi() requires S")
+
+	calc_ns_cov_2phi_Rcpp(as.vector(tau), as.vector(sigma), as.vector(phi1), as.vector(phi2), as.integer(Nr), as.vector(R-1), as.matrix(S))
+}
+
+# - Assumes dense Omega(s_i)
+"calc_ns_cov_angle" <- function(tau, sigma, phi1, phi2, rho, Nr, R, S) {
+	if (missing(S)) stop("calc_ns_cov_angle() requires S")
+
+	calc_ns_cov_angle_Rcpp(as.vector(tau), as.vector(sigma), as.vector(phi1), as.vector(phi2), as.vector(rho), as.integer(Nr), as.vector(R-1), as.matrix(S))
+}
+
+
 # fast computing for each region having a different range (isotropic!)
 "fast_ns_cov" <- ( function(phi, n, Nr, R, S, D2) {
 	if (missing(D2)) {
