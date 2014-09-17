@@ -19,7 +19,7 @@ source("R/ns_estimate.R")
 
 	# create discrete grid for parameters
 	design$D2 <- rdist(design$S[,1])^2 + rdist(design$S[,2])^2
-	design$d_gridR <- create_blocks(design$S, 4, queen=FALSE)
+	design$d_gridR <- create_blocks(design$S, design$d_Nr, queen=FALSE)
 
 	# create blocks for BCL
 	design$gridB <- blocks.cluster(design$S, round( (factors$n-factors$nt)/design$Nb ) )
@@ -27,13 +27,13 @@ source("R/ns_estimate.R")
 	# create subregions for NS model
 	design$gridR <- create_blocks(design$S, design$Nr, queen=FALSE)
 
-	exp.step  <- design$Nreps #/20
+	exp.step  <- design$Nreps/20
 	exp.start <- ((which.part-1)*exp.step+1)
 	exp.end   <- exp.start+exp.step-1
 
 	#res <- mclapply(1:design$Nreps, function(i) {
-	res <- mclapply(exp.start:exp.end, function(i) {
-	#res <- lapply(exp.start:exp.end, function(i) {
+	#res <- mclapply(exp.start:exp.end, function(i) {
+	res <- lapply(exp.start:exp.end, function(i) {
 		seed <- 1983 + i + design$Nreps*(which.exp-1)
     set.seed(seed)  # set a seed for reproducibility
 
@@ -54,21 +54,21 @@ source("R/ns_estimate.R")
 
 			# ... non-stationary
 			#res.ns <- eval.ns(design, factors, data, res.s$phi)
-			res.nsL1 <- eval.ns(design, factors, data, res.s$tau, res.s$sigma, res.s$phi, fuse=TRUE)
-			nsL1ret <- with(res.nsL1, list(nsL1.success=success, nsL1.elapsed=elapsed,
-				nsL1.b0=b0, nsL1.b1=b1, nsL1.b0.cov=b0.cov, nsL1.b1.cov=b1.cov, nsL1.b0.clen=b0.clen, nsL1.b1.clen=b1.clen,
-				nsL1.mse.tau=mse.tau, nsL1.mse.sigma=mse.sigma, nsL1.mse.phi=mse.phi, nsL1.c_ll=c_ll, nsL1.mse=mse, nsL1.cov=cov, nsL1.clen=clen, nsL1.lambda=lambda))
+			#res.nsL1 <- eval.ns(design, factors, data, res.s$tau, res.s$sigma, res.s$phi, fuse=TRUE)
+			#nsL1ret <- with(res.nsL1, list(nsL1.success=success, nsL1.elapsed=elapsed,
+			#	nsL1.b0=b0, nsL1.b1=b1, nsL1.b0.cov=b0.cov, nsL1.b1.cov=b1.cov, nsL1.b0.clen=b0.clen, nsL1.b1.clen=b1.clen,
+			#	nsL1.mse.tau=mse.tau, nsL1.mse.sigma=mse.sigma, nsL1.mse.phi=mse.phi, nsL1.c_ll=c_ll, nsL1.mse=mse, nsL1.cov=cov, nsL1.clen=clen, nsL1.lambda=lambda))
 
-			res.nsL2 <- eval.ns(design, factors, data, res.s$tau, res.s$sigma, res.s$phi, fuse=FALSE)
-			nsL2ret <- with(res.nsL2, list(nsL2.success=success, nsL2.elapsed=elapsed,
-				nsL2.b0=b0, nsL2.b1=b1, nsL2.b0.cov=b0.cov, nsL2.b1.cov=b1.cov, nsL2.b0.clen=b0.clen, nsL2.b1.clen=b1.clen,
-				nsL2.mse.tau=mse.tau, nsL2.mse.sigma=mse.sigma, nsL2.mse.phi=mse.phi, nsL2.c_ll=c_ll, nsL2.mse=mse, nsL2.cov=cov, nsL2.clen=clen, nsL2.lambda=lambda))
+			#res.nsL2 <- eval.ns(design, factors, data, res.s$tau, res.s$sigma, res.s$phi, fuse=FALSE)
+			#nsL2ret <- with(res.nsL2, list(nsL2.success=success, nsL2.elapsed=elapsed,
+			#	nsL2.b0=b0, nsL2.b1=b1, nsL2.b0.cov=b0.cov, nsL2.b1.cov=b1.cov, nsL2.b0.clen=b0.clen, nsL2.b1.clen=b1.clen,
+			#	nsL2.mse.tau=mse.tau, nsL2.mse.sigma=mse.sigma, nsL2.mse.phi=mse.phi, nsL2.c_ll=c_ll, nsL2.mse=mse, nsL2.cov=cov, nsL2.clen=clen, nsL2.lambda=lambda))
 
 			# ... kernel-convolutions
 			#res.kc <- eval.kc(design, factors, data)
 
 		# return results
-		r <- c(list(seed=seed, n=factors$n), oret, sret, nsL1ret, nsL2ret)
+		r <- c(list(seed=seed, n=factors$n), oret, sret) #, nsL2ret, nsL2ret)
 		#r <- list(seed=seed, n=factors$n,
 			# oracle results
 			#o.elapsed=res.o$elapsed, o.c_ll=res.o$c_ll, o.mse=res.o$mse, o.cov=res.o$cov, o.clen=res.o$clen #,
@@ -108,26 +108,29 @@ print(round(unlist(r),3))
 		#Sigma <- kn*diag(factors$n) + ks*fast_ns_cov(data$phi, factors$n, length(data$phi), design$d_gridR$B, design$S, design$D2)
 		Sigma <- calc_ns_cov(tau=kn, sigma=sqrt(ks), phi=data$phi, Nr=length(data$phi), R=design$d_gridR$B, S=design$S, D2=design$D2)
 	} else if (factors$data == "ns_discrete_nugget") {
-		data$tau   <- c(0.05, 0.10, 0.10, 0.15)
-		#data$tau   <- c(0.05, 1.05, 1.05, 2.05)
+		#data$tau   <- c(0.05, 0.10, 0.10, 0.15)
+		data$tau   <- c(0.05, 1.05, 1.05, 2.05)
 		#data$tau   <- c(0.05, 0.5, 0.5, 1.0)
 		#data$sigma <- sqrt(0.95)
 		#data$phi   <- 0.05
 		#data$tau   <- c(2/3, 2/4, 2/4, 2/5)
-		data$sigma <- 1
+		data$sigma <- sqrt(0.95)
 		data$phi   <- 0.05
-		Sigma <- calc_ns_cov(tau=data$tau, sigma=data$sigma, phi=data$phi, Nr=4, R=design$d_gridR$B, S=design$S, D2=design$D2)
+		Sigma <- calc_ns_cov(tau=data$tau, sigma=data$sigma, phi=data$phi, Nr=design$d_Nr, R=design$d_gridR$B, S=design$S, D2=design$D2)
 	} else if (factors$data == "ns_discrete_psill") {
 		data$tau   <- 0.05
 		data$sigma <- sqrt(c(.95,1.90,1.90,2.85))
 		#data$sigma <- sqrt(c(0.95,1.95,1.95,2.95))
 		data$phi   <- 0.05
-		Sigma <- calc_ns_cov(tau=data$tau, sigma=data$sigma, phi=data$phi, Nr=4, R=design$d_gridR$B, S=design$S, D2=design$D2)
+		Sigma <- calc_ns_cov(tau=data$tau, sigma=data$sigma, phi=data$phi, Nr=design$d_Nr, R=design$d_gridR$B, S=design$S, D2=design$D2)
 	} else if (factors$data == "ns_discrete_range") {
 		data$tau   <- 0.05
-		data$sigma <- sqrt(0.95)
-		data$phi   <- c(0.05, 0.10, 0.10, 0.15)
-		Sigma <- calc_ns_cov(tau=data$tau, sigma=data$sigma, phi=data$phi, Nr=4, R=design$d_gridR$B, S=design$S, D2=design$D2)
+		data$sigma <- 1
+		#data$phi   <- c(0.05, 0.10, 0.10, 0.15)
+		#data$phi   <- c(0.01, 0.10, 0.10, 0.25)
+		#data$phi   <- c(.01, .01, .01, .25, .25, .25, .50, .50, .50)
+		data$phi   <- c(.01, .01, .15, .15)
+		Sigma <- calc_ns_cov(tau=data$tau, sigma=data$sigma, phi=data$phi, Nr=design$d_Nr, R=design$d_gridR$B, S=design$S, D2=design$D2)
 	} else if (factors$data == "ns_discrete_nugget_short") {
 		data$tau   <- c(2/3, 2/4, 2/4, 2/5)
 		data$sigma <- 1
@@ -165,14 +168,19 @@ print(round(unlist(r),3))
 
 #cat("Generating y\n")
 	# generate response
-	data$b <- c(design$b0, design$b1)
+	#data$b <- c(design$b0, design$b1)
+	data$b <- c(design$b0, design$b1, 20, 30, 40)
 	#y <- 
 	#y <- matrix(NA, nrow=factors$n, ncol=factors$Nreps)
 	LSigma <- t(chol(Sigma))
 	#X <- cbind(1, rnorm(factors$n))
 	#Xb <- X %*% data$b
-	X <- array(1, dim=c(factors$n,factors$Nreps,2))
+	X <- array(0, dim=c(factors$n,factors$Nreps,2+3))
+	X[,,1] <- 1
 	X[,,2] <- rnorm(factors$n*factors$Nreps)
+	X[,,3] <- as.integer(design$d_gridR$B==2)
+	X[,,4] <- as.integer(design$d_gridR$B==3)
+	X[,,5] <- as.integer(design$d_gridR$B==4)
 	y <- sapply(1:factors$Nreps, function(rep) {
 		X[,rep,] %*% data$b + LSigma %*% rnorm(factors$n)
 	})
@@ -600,12 +608,14 @@ sim.design <- list(
 	# number of replications
 	#Nreps=250,
 	Nreps=100,
+	# actual number of regions for varying parameter
+	d_Nr=2^2,
 	# number of regions in NS model
 	Nr=4^2,
 	# number of obs per block in BCL
 	Nb=50,
 	# coefficients
-	b0=0, b1=1
+	b0=100, b1=1
 )
 
 sim.factors <- expand.grid(
@@ -616,14 +626,16 @@ sim.factors <- expand.grid(
 	#data=c("ns_discrete_nugget_short","ns_discrete_nugget_med","ns_discrete_nugget_long"),
 	# number of time replications
 	Nreps=10,
+	#Nreps=50,
 	# amount of data to generate
-	n=23^2, nt=100
-	#n=39^2, nt=500
+	#n=23^2, nt=100
+	n=39^2, nt=500
+	#n=50^2, nt=500
 )
 
 if (TRUE) {
-	options(cores=4)
-	options(mc.cores=4)
+	options(cores=1)
+	options(mc.cores=1)
 
 	# run the experiment for each combination of factors
 	#res <- lapply(1:1, function(i) { #nrow(sim.factors), function(i) {
