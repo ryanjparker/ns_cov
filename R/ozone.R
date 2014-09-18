@@ -1,7 +1,54 @@
 # fit penalized model to ozone data
 
+source("R/fit_cv.R")
+
+# load data
+load("data/ozone_data.RData")
+
+# which sites do we keep?
+keep <- which( rowSums(apply(Y, 2, is.na))==0 )
+n <- length(keep)
+
+# data for NS model
+X <- array(1, dim=c(n, ncol(Y), 1))
+X[,,1] <- 1
+#X[,,2] <- CMAQ[index,][keep,]
+
+dat.ns <- list(
+	#y=matrix( fit.slr$residuals, nrow=length(keep), ncol=ncol(Y) ),
+	y=Y[keep,], X=X,
+	S=cbind(x[s[keep,1]], y[s[keep,2]])
+)
+
+# scale data
+dat.ns$y <- with(dat.ns, (y-mean(y))/sd(y) )
+dat.ns$S <- with(dat.ns, (S + abs(min(S)))/(max(S)-min(S)) )
+
+gridR <- blocks.cluster(dat.ns$S, which_Nr, queen=FALSE)
+Nr    <- length(unique(gridR$B))
+gridB <- blocks.cluster(dat.ns$S, 3^2)
+Nb    <- length(unique(gridB$B))
+
+kn <- 0.08; ks <- 0.73; kr <- 0.08
+if (which_type == 0) {
+	cov.params <- list(nugget=list(type="single"), psill=list(type="single"), range=list(type="single"))
+	starts <- list(nugget=kn, psill=sqrt(ks), range=kr)
+} else {
+	cov.params <- list(nugget=list(type="single"), psill=list(type="single"), range=list(type="vary"))
+	starts <- list(nugget=kn, psill=sqrt(ks), range=rep(kr,Nr))
+}
+
+set.seed(311)
+err <- with(dat.ns, {
+	ns_cv(type=which_type, lambda=exp(which_lambda), y=y, S=S, X=X, Nfolds=5, starts=starts, cov.params=cov.params, gridR=gridR, gridB=gridB) #, verbose=TRUE, all=FALSE, parallel=FALSE)
+})
+
+save(err, file=paste0("output/ozone/",which_type,"/",which_lambda,"_",which_Nr,".RData"))
+
+if (FALSE) { ### ONLY SIMS
+
+
 library(fields)
-library(gstat)
 library(MASS)
 
 source("R/create_blocks.R")
@@ -11,21 +58,24 @@ source("R/ns_estimate.R")
 # load data
 load("data/ozone_data.RData")
 
+set.seed(311)
 # which sites do we keep?
 keep <- which( rowSums(apply(Y, 2, is.na))==0 )
 n <- length(keep)
 
+if (FALSE) {
 # start by fitting SLR
 dat.slr <- list(
 	y=as.vector(Y[keep,]),
 	cmaq=as.vector(CMAQ[index,][keep,])
 )
 fit.slr <- lm(y~cmaq, data=dat.slr)
+}
 
 # data for NS model
-X <- array(1, dim=c(n, ncol(Y), 2))
+X <- array(1, dim=c(n, ncol(Y), 1))
 X[,,1] <- 1
-X[,,2] <- CMAQ[index,][keep,]
+#X[,,2] <- CMAQ[index,][keep,]
 
 dat.ns <- list(
 	#y=matrix( fit.slr$residuals, nrow=length(keep), ncol=ncol(Y) ),
@@ -33,18 +83,19 @@ dat.ns <- list(
 	S=cbind(x[s[keep,1]], y[s[keep,2]])
 )
 
-options(cores=4)
-options(mc.cores=4)
+options(cores=1)
+options(mc.cores=1)
 
 # create grid for params and BCL
 #gridR <- create_blocks(dat.ns$S, 5^2, queen=FALSE)
-gridR <- blocks.cluster(dat.ns$S, 10^2, queen=FALSE)
+gridR <- blocks.cluster(dat.ns$S, which_Nr, queen=FALSE)
 #gridR <- blocks.cluster(dat.ns$S, 2^2, queen=FALSE)
 Nr    <- length(unique(gridR$B))
 gridB <- blocks.cluster(dat.ns$S, 3^2)
 Nb    <- length(unique(gridB$B))
 
 if (FALSE) {
+	# plot data
 	#pdf("pdf/ozone/locations.pdf"); plot(x[s[,1]],y[s[,2]]); lines(borders); graphics.off()
 	#pdf("pdf/ozone/locations.pdf"); plot(dat.ns$S[,1],dat.ns$S[,2]); lines(borders); graphics.off()
 	pdf("pdf/ozone/regions.pdf")
@@ -62,7 +113,8 @@ done
 dat.ns$y <- with(dat.ns, (y-mean(y))/sd(y) )
 dat.ns$S <- with(dat.ns, (S + abs(min(S)))/(max(S)-min(S)) )
 
-if (TRUE) {
+if (FALSE) {
+	library(gstat)
 	# fit variogram
 	points <- sample(n, min(n,1000))
 	d      <- dist(dat.ns$S[points,])
@@ -378,7 +430,62 @@ done
 done
 }
 
-if (TRUE) { # predict on a holdout set
+if (FALSE) { # fit specific lambda
+	#kn <- 3.985906; ks <- 8.248308; kr <- 0.09735864
+	kn <- 0.08; ks <- 0.73; kr <- 0.08
+
+	y <- dat.ns$y
+	S <- dat.ns$S
+	X <- dat.ns$X
+
+	# create holdout set
+	cat("CV fit\n")
+	set.seed(1983)
+
+	Nfolds <- 5
+	folds <- suppressWarnings( split(sample(1:n),1:Nfolds) )
+
+	err <- c()
+	for (fold in 1:Nfolds) {
+		in.h <- folds[[fold]]
+		n.h <- length(in.h)
+		n.nh <- n-n.h
+
+		if (type == 0) {
+			fit <- ns_estimate_all(lambda=0,y=y[-in.h,],X=X[-in.h,,,drop=FALSE],S=S[-in.h,],R=rep(1,n.nh),Rn=gridR$neighbors,B=gridB$B[-in.h],Bn=gridB$neighbors,
+				cov.params=list(nugget=list(type="single"), psill=list(type="single"), range=list(type="single")),
+				inits=list(nugget=kn, psill=sqrt(ks), range=kr),
+				verbose=TRUE,parallel=FALSE)
+			c_ll <- ns_cond_ll(X[-in.h,,,drop=FALSE], X[in.h,,,drop=FALSE], y[-in.h,], y[in.h,], fit$beta, fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], rep(1, length=n.nh), rep(1, length=n.h))
+			preds <- ns_full_pred(X[-in.h,,,drop=FALSE], X[in.h,,,drop=FALSE], y[-in.h,], fit$beta, fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], rep(1, length=n.nh), rep(1, length=n.h))
+			diffs2 <- sapply(1:ncol(y), function(i) { (preds$y[,i]-y[in.h,i])^2 })
+			err <- rbind(err, c(log_lambda=which_lambda, type=0, c_ll=c_ll, mse=mean(diffs2), mse_se=sd(diffs2)/sqrt(length(diffs2)), Rsqr=1 - sum(diffs2)/sum( (preds$y-mean(y[in.h,]))^2 )))
+		} else {
+			if (type == 1) fuse <- TRUE else fuse <- FALSE
+
+			starts <- list(
+				nugget=rep(kn,length(unique(gridR$B[-in.h]))),
+				psill=rep(sqrt(ks),length(unique(gridR$B[-in.h]))),
+				range=rep(kr,length(unique(gridR$B[-in.h])))
+			)
+			try({
+				fit <- ns_estimate_all(lambda=exp(which_lambda),y=y[-in.h,],X=X[-in.h,,,drop=FALSE],S=S[-in.h,],R=gridR$B[-in.h],Rn=gridR$neighbors,B=gridB$B[-in.h],Bn=gridB$neighbors,
+					cov.params=list(nugget=list(type="vary"), psill=list(type="vary"), range=list(type="vary")),
+					inits=list(nugget=starts$nugget, psill=starts$psill, range=starts$range),
+					fuse=fuse,verbose=TRUE,all=FALSE,parallel=FALSE)
+				c_ll <- ns_cond_ll(X[-in.h,,,drop=FALSE], X[in.h,,,drop=FALSE], y[-in.h,], y[in.h,], fit$beta, fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], gridR$B[-in.h], gridR$B[in.h])
+				preds <- ns_full_pred(X[-in.h,,,drop=FALSE], X[in.h,,,drop=FALSE], y[-in.h,], fit$beta, fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], gridR$B[-in.h], gridR$B[in.h])
+				diffs2 <- sapply(1:ncol(y), function(i) { (preds$y[,i]-y[in.h,i])^2 })
+			})
+			err <- rbind(err, c(log_lambda=which_lambda, type=type, c_ll=c_ll, mse=mean(diffs2), mse_se=sd(diffs2)/sqrt(length(diffs2)), Rsqr=1 - sum(diffs2)/sum( (preds$y-mean(y[in.h,]))^2 )))
+		}
+		print(round(err,5))
+	}
+
+	save(err, file=paste0("output/ozone/",type,"/",which_lambda,"_",which_Nr,".RData"))
+}
+
+if (FALSE) { # predict on a holdout set
 	cat("Holdout test\n")
 	set.seed(1983)
 	#in.h <- round(seq(1, n, len=round(0.1*n)))
@@ -394,12 +501,12 @@ if (TRUE) { # predict on a holdout set
 
 	#lambdas <- c(10000,1000,500,100,50,10,5,2,1,.5,.1)
 	#lambdas <- c(100,50,25,10,5,1,.5,.1,.05,.01)
-	lambdas <- exp( 4:(-4) )
+	#lambdas <- exp( 4:(-4) )
 	#lambdas <- exp( c(6,5.5,5,4.5) )
 	#lambdas <- exp( 6:2 )
 	#lambdas <- exp( 4:1 )
 	#lambdas <- exp( (-4):(-7) )
-	err <- matrix(NA, nrow=2*length(lambdas)+1, ncol=4)
+	#err <- matrix(NA, nrow=2*length(lambdas)+1, ncol=4)
 
 	y <- dat.ns$y
 	S <- dat.ns$S
@@ -464,3 +571,5 @@ if (TRUE) { # predict on a holdout set
 	graphics.off()
 
 }
+
+} ### ONLY SIMS

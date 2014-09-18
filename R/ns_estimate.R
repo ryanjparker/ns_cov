@@ -1530,7 +1530,7 @@ done
 	#mu.new  <- Xnew %*% beta
 	C <- Sigma[nFit+1:nNew,1:nFit] %*% chol2inv(chol(Sigma[1:nFit,1:nFit]))
 	#y_0 <- apply(y, 2, function(z) { mu.new + C %*% (z-mu.fit) })
-	y_0  <- do.call("cbind", lapply(1:ncol(y), function(t) { Xnew[,t,] %*% beta + C %*% (y[,t]-Xfit[,t,] %*% beta) }) )
+	y_0  <- do.call("cbind", lapply(1:ncol(y), function(t) { as.matrix(Xnew[,t,]) %*% beta + C %*% (y[,t]-as.matrix(Xfit[,t,]) %*% beta) }) )
 	if (Nreps == 1) y_0 <- as.vector(y_0)
 
 	c_Sigma    <- Sigma[nFit+1:nNew,nFit+1:nNew] - C %*% Sigma[1:nFit,nFit+1:nNew]
@@ -1574,7 +1574,7 @@ done
 	#mu.fit  <- Xfit %*% beta
 	#mu.new  <- Xnew %*% beta
 	#c_mu    <- apply(yfit, 2, function(z) { mu.new + C %*% (z-mu.fit) })
-	c_mu    <- do.call("cbind", lapply(1:ncol(yfit), function(t) { Xnew[,t,] %*% beta + C %*% (yfit[,t]-Xfit[,t,] %*% beta) }) )
+	c_mu    <- do.call("cbind", lapply(1:ncol(yfit), function(t) { as.matrix(Xnew[,t,]) %*% beta + C %*% (yfit[,t]-as.matrix(Xfit[,t,]) %*% beta) }) )
 	c_Sigma <- Sigma[nFit+1:nNew,nFit+1:nNew] - C %*% Sigma[1:nFit,nFit+1:nNew]
 
 	c_cholSigma <- chol(c_Sigma)
