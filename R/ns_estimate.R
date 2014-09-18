@@ -1538,7 +1538,7 @@ done
 
 	sd.pred <- sqrt(diag( c_Sigma ))
 
-	list(y=y_0, sd=as.vector(sd.pred))
+	list(y=as.matrix(y_0), sd=as.vector(sd.pred))
 }
 
 # conditional log-likelihood
