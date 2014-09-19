@@ -24,20 +24,23 @@ Nr    <- length(unique(gridR$B))
 gridB <- blocks.cluster(dat.ns$S, 5^2)
 Nb    <- length(unique(gridB$B))
 
-kn <- 1.00; ks <- 1.00; kr <- 0.10
+kn <- 1.00; ks <- 0.50; kr <- 0.10
 if (which_type == 0) {
 	cov.params <- list(nugget=list(type="single"), psill=list(type="single"), range=list(type="single"))
 	starts <- list(nugget=kn, psill=sqrt(ks), range=kr)
 } else {
-	cov.params <- list(nugget=list(type="vary"), psill=list(type="vary"), range=list(type="vary"))
+	#cov.params <- list(nugget=list(type="vary"), psill=list(type="vary"), range=list(type="vary"))
+	#starts <- list(nugget=rep(kn,Nr), psill=rep(sqrt(ks),Nr), range=rep(kr,Nr))
+	cov.params <- list(nugget=list(type="vary"), psill=list(type="single"), range=list(type="vary"))
 	starts <- list(nugget=rep(kn,Nr), psill=rep(sqrt(ks),Nr), range=rep(kr,Nr))
 }
 
-options(cores=4); options(mc.cores=4)
+options(cores=1); options(mc.cores=1)
 
 set.seed(311)
 err <- with(dat.ns, {
-	ns_cv(type=which_type, lambda=exp(which_lambda), y=y, S=S, X=X, Nfolds=5, starts=starts, cov.params=cov.params, gridR=gridR, gridB=gridB, parallel=TRUE) #, verbose=TRUE, all=FALSE, parallel=FALSE)
+	ns_cv(type=which_type, lambda=exp(which_lambda), y=y, S=S, X=X, Nfolds=5, starts=starts, cov.params=cov.params, gridR=gridR, gridB=gridB,
+		parallel=FALSE) #, verbose=TRUE, all=FALSE, parallel=FALSE)
 })
 
 save(err, file=paste0("output/anom/",which_type,"/",which_lambda,"_",which_Nr,".RData"))
