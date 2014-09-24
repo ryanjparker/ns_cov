@@ -1,6 +1,7 @@
 # estimate parameters in NS models
 #library(gstat)
 library(parallel)
+library(spacious)
 
 "ns_estimate_all" <- function(lambda, y, X, S, R, Rn, B, Bn, D, D2,
 	cov.params, inits,
@@ -42,7 +43,7 @@ library(parallel)
 	alpha <- 1
 
 	# number of subregions
-	Nr <- length(unique(R))
+	Nr <- max(Rn) #length(unique(R))
 
 	# number of blocks
 	Nb <- length(unique(B))
@@ -81,6 +82,14 @@ library(parallel)
 		if (!is.null(cov.params$psill)  & cov.params$psill$type=="fixed" ) { isFixed$psill  <- TRUE; sigma <- cov.params$psill$value  }
 		if (!is.null(cov.params$range)  & cov.params$range$type=="fixed" ) { isFixed$range  <- TRUE; phi   <- cov.params$range$value  }
 	}
+
+	R.tau   <- R
+	R.sigma <- R
+	R.phi   <- R
+
+	if (Ntau == 1)   R.tau   <- rep(1, n)
+	if (Nsigma == 1) R.sigma <- rep(1, n)
+	if (Nphi == 1)   R.phi   <- rep(1, n)
 
 	if (missing(inits)) inits <- list()
 
@@ -161,7 +170,7 @@ library(parallel)
 	# tau: compute partials wrt Sigma(i,j)
 	partials_tau <- function(region, tau, ltau, n.pair, in.pair) {
 		D.pair   <- D[in.pair,in.pair]
-		R.pair   <- R[in.pair]
+		R.pair   <- R.tau[in.pair]
 		R.region <- which(R.pair==region)
 		notR.region <- which(R.pair!=region)
 		n.region <- length(R.region)
@@ -180,7 +189,7 @@ library(parallel)
 	# sigma: compute partials wrt cov2cor( Sigma )(i,j)
 	partials_sigma <- function(region, sigma, lsigma, n.pair, in.pair) {
 		D.pair   <- D[in.pair,in.pair]
-		R.pair   <- R[in.pair]
+		R.pair   <- R.sigma[in.pair]
 		R.region <- which(R.pair==region)
 		notR.region <- which(R.pair!=region)
 		n.region <- length(R.region)
@@ -204,7 +213,7 @@ library(parallel)
 	# phi: compute partials wrt log Sigma(i,j)
 	lpartials_phi <- function(region, phi, lphi, n.pair, in.pair) {
 		D.pair   <- D[in.pair,in.pair]
-		R.pair   <- R[in.pair]
+		R.pair   <- R.phi[in.pair]
 		R.region <- which(R.pair==region)
 		notR.region <- which(R.pair!=region)
 		n.region <- length(R.region)
@@ -488,9 +497,11 @@ library(parallel)
 
 			# compute the Ws
 			for (r in 1:Ntau) {
-				partial <- partials_tau(r, tau, ltau, n.pair, in.pair)
-				W[[r]] <- invSigma %*% partial
-				u[r] <- -0.5 * Nreps * sum( diag(W[[r]]) ) + 0.5 * sum(apply(q, 2, function(z) { t(z) %*% partial %*% z }))
+				if (Ntau == 1 | sum(R.tau[in.pair]==r) > 0) {
+					partial <- partials_tau(r, tau, ltau, n.pair, in.pair)
+					W[[r]] <- invSigma %*% partial
+					u[r] <- -0.5 * Nreps * sum( diag(W[[r]]) ) + 0.5 * sum(apply(q, 2, function(z) { t(z) %*% partial %*% z }))
+				}
 			}
 
 			# compute the hessian H
@@ -498,7 +509,9 @@ library(parallel)
 			index <- 1
 			sapply(1:Ntau, function(r) {
 				sapply(r:Ntau, function(s) {
-					H[index] <<- 0.5 * sum_diag_mm(W[[r]], W[[s]])
+					if (Ntau == 1 | (sum(R[in.pair]==r) > 0 & sum(R[in.pair]==s) > 0)) {
+						H[index] <<- 0.5 * sum_diag_mm(W[[r]], W[[s]])
+					}
 
 					index <<- index+1
 				})
@@ -577,7 +590,7 @@ library(parallel)
 		if (fuse & Ntau > 1) {
 			# threshold together
 			sapply(1:nrow(Rn), function(i) {
-				if ( abs(ltau[ Rn[i,1] ] - ltau[ Rn[i,2] ])/abs(ltau[ Rn[i,1] ]) < 1e-4 ) {
+				if ( abs(ltau[ Rn[i,1] ] - ltau[ Rn[i,2] ])/(0.1+abs(ltau[ Rn[i,1] ])) < 1e-4 ) {
 					ltau[Rn[i,2]] <<- ltau[Rn[i,1]]
 				}
 			})
@@ -610,13 +623,15 @@ library(parallel)
 
 			# compute the Ws
 			for (r in 1:Nsigma) {
-				if (Ntau > 1) {
-					partial <- (Sigma-diag(tau[R[in.pair]])) * partials_sigma(r, sigma, lsigma, n.pair, in.pair)
-				} else {
-					partial <- (Sigma-diag(rep(tau,n.pair))) * partials_sigma(r, sigma, lsigma, n.pair, in.pair)
+				if (Nsigma==1 | sum(R[in.pair]==r) > 0) {
+					if (Ntau > 1) {
+						partial <- (Sigma-diag(tau[R[in.pair]])) * partials_sigma(r, sigma, lsigma, n.pair, in.pair)
+					} else {
+						partial <- (Sigma-diag(rep(tau,n.pair))) * partials_sigma(r, sigma, lsigma, n.pair, in.pair)
+					}
+					W[[r]] <- invSigma %*% partial
+					u[r] <- -0.5 * Nreps * sum( diag(W[[r]]) ) + 0.5 * sum(apply(q, 2, function(z) { t(z) %*% partial %*% z }))
 				}
-				W[[r]] <- invSigma %*% partial
-				u[r] <- -0.5 * Nreps * sum( diag(W[[r]]) ) + 0.5 * sum(apply(q, 2, function(z) { t(z) %*% partial %*% z }))
 			}
 
 			# compute the hessian H
@@ -624,7 +639,9 @@ library(parallel)
 			index <- 1
 			sapply(1:Nsigma, function(r) {
 				sapply(r:Nsigma, function(s) {
-					H[index] <<- 0.5 * sum_diag_mm(W[[r]], W[[s]])
+					if (Nsigma==1 | (sum(R[in.pair]==r) > 0 & sum(R[in.pair]==s) > 0)) {
+						H[index] <<- 0.5 * sum_diag_mm(W[[r]], W[[s]])
+					}
 
 					index <<- index+1
 				})
@@ -703,7 +720,7 @@ library(parallel)
 		if (fuse & Nsigma > 1) {
 			# threshold together
 			sapply(1:nrow(Rn), function(i) {
-				if ( abs(lsigma[ Rn[i,1] ] - lsigma[ Rn[i,2] ])/abs(lsigma[ Rn[i,1] ]) < 1e-4 ) {
+				if ( abs(lsigma[ Rn[i,1] ] - lsigma[ Rn[i,2] ])/(0.1+abs(lsigma[ Rn[i,1] ])) < 1e-4 ) {
 					lsigma[Rn[i,2]] <<- lsigma[Rn[i,1]]
 				}
 			})
@@ -736,9 +753,11 @@ library(parallel)
 
 			# compute the Ws
 			for (r in 1:Nphi) {
-				partial <- Sigma * lpartials_phi(r, phi, lphi, n.pair, in.pair)
-				W[[r]] <- invSigma %*% partial
-				u[r] <- -0.5 * Nreps * sum( diag(W[[r]]) ) + 0.5 * sum(apply(q, 2, function(z) { t(z) %*% partial %*% z }))
+				if (sum(R[in.pair]==r) > 0) {
+					partial <- Sigma * lpartials_phi(r, phi, lphi, n.pair, in.pair)
+					W[[r]] <- invSigma %*% partial
+					u[r] <- -0.5 * Nreps * sum( diag(W[[r]]) ) + 0.5 * sum(apply(q, 2, function(z) { t(z) %*% partial %*% z }))
+				}
 			}
 
 			# compute the hessian H
@@ -746,7 +765,9 @@ library(parallel)
 			index <- 1
 			sapply(1:Nphi, function(r) {
 				sapply(r:Nphi, function(s) {
-					H[index] <<- 0.5 * sum_diag_mm(W[[r]], W[[s]])
+					if (sum(R[in.pair]==r) > 0 & sum(R[in.pair]==s) > 0) {
+						H[index] <<- 0.5 * sum_diag_mm(W[[r]], W[[s]])
+					}
 
 					index <<- index+1
 				})
@@ -825,7 +846,7 @@ library(parallel)
 		if (fuse & Nphi > 1) {
 			# threshold together
 			sapply(1:nrow(Rn), function(i) {
-				if ( abs(lphi[ Rn[i,1] ] - lphi[ Rn[i,2] ])/abs(lphi[ Rn[i,1] ]) < 1e-4 ) {
+				if ( abs(lphi[ Rn[i,1] ] - lphi[ Rn[i,2] ])/(0.1+abs(lphi[ Rn[i,1] ])) < 1e-4 ) {
 					lphi[Rn[i,2]] <<- lphi[Rn[i,1]]
 				}
 			})
@@ -1503,7 +1524,7 @@ done
 	y_0
 }
 
-"ns_full_pred" <- function(Xfit, Xnew, y, beta, tau, sigma, phi, Sfit, Snew, Rfit, Rnew, D2, Sigma) {
+"ns_full_pred" <- function(Xfit, Xnew, y, beta, tau, sigma, phi, Sfit, Snew, Rfit, Rnew, D2, Sigma, gpu=FALSE) {
 	nFit <- nrow(Sfit)
 	nNew <- nrow(Snew)
 	n <- nFit+nNew
@@ -1528,13 +1549,21 @@ done
 	# get the predictions
 	#mu.fit  <- Xfit %*% beta
 	#mu.new  <- Xnew %*% beta
-	C <- Sigma[nFit+1:nNew,1:nFit] %*% chol2inv(chol(Sigma[1:nFit,1:nFit]))
+	if (gpu) {
+		C <- gpuMM(Sigma[nFit+1:nNew,1:nFit], gpuChol2Inv(Sigma[1:nFit,1:nFit]))
+	} else {
+		C <- Sigma[nFit+1:nNew,1:nFit] %*% chol2inv(chol(Sigma[1:nFit,1:nFit]))
+	}
 	#y_0 <- apply(y, 2, function(z) { mu.new + C %*% (z-mu.fit) })
 	y_0  <- do.call("cbind", lapply(1:ncol(y), function(t) { as.matrix(Xnew[,t,]) %*% beta + C %*% (y[,t]-as.matrix(Xfit[,t,]) %*% beta) }) )
 	if (Nreps == 1) y_0 <- as.vector(y_0)
 
-	c_Sigma    <- Sigma[nFit+1:nNew,nFit+1:nNew] - C %*% Sigma[1:nFit,nFit+1:nNew]
-	c_invSigma <- chol2inv(chol(c_Sigma))
+	if (gpu) {
+		c_Sigma    <- Sigma[nFit+1:nNew,nFit+1:nNew] - gpuMM(C, Sigma[1:nFit,nFit+1:nNew])
+	} else {
+		c_Sigma    <- Sigma[nFit+1:nNew,nFit+1:nNew] - C %*% Sigma[1:nFit,nFit+1:nNew]
+	}
+	#c_invSigma <- chol2inv(chol(c_Sigma))
 
 	sd.pred <- sqrt(diag( c_Sigma ))
 
@@ -1542,7 +1571,7 @@ done
 }
 
 # conditional log-likelihood
-"ns_cond_ll" <- function(Xfit, Xnew, yfit, ynew, beta, tau, sigma, phi, Sfit, Snew, Rfit, Rnew, D2, Sigma) {
+"ns_cond_ll" <- function(Xfit, Xnew, yfit, ynew, beta, tau, sigma, phi, Sfit, Snew, Rfit, Rnew, D2, Sigma, gpu=FALSE) {
 	nFit <- nrow(Sfit)
 	nNew <- nrow(Snew)
 	n <- nFit+nNew
@@ -1568,17 +1597,32 @@ done
 		Sigma <- calc_ns_cov(tau=tau, sigma=sigma, phi=phi, Nr=Nr, R=R, D2=D2)
 	}
 
-	C <- Sigma[nFit+1:nNew,1:nFit] %*% chol2inv(chol(Sigma[1:nFit,1:nFit]))
+	if (gpu) {
+		C <- gpuMM(Sigma[nFit+1:nNew,1:nFit], gpuChol2Inv(Sigma[1:nFit,1:nFit]))
+	} else {
+		C <- Sigma[nFit+1:nNew,1:nFit] %*% chol2inv(chol(Sigma[1:nFit,1:nFit]))
+	}
 
 	# conditional mean and covariance
 	#mu.fit  <- Xfit %*% beta
 	#mu.new  <- Xnew %*% beta
 	#c_mu    <- apply(yfit, 2, function(z) { mu.new + C %*% (z-mu.fit) })
 	c_mu    <- do.call("cbind", lapply(1:ncol(yfit), function(t) { as.matrix(Xnew[,t,]) %*% beta + C %*% (yfit[,t]-as.matrix(Xfit[,t,]) %*% beta) }) )
-	c_Sigma <- Sigma[nFit+1:nNew,nFit+1:nNew] - C %*% Sigma[1:nFit,nFit+1:nNew]
+	if (gpu) {
+		c_Sigma <- Sigma[nFit+1:nNew,nFit+1:nNew] - gpuMM(C, Sigma[1:nFit,nFit+1:nNew])
+	} else {
+		c_Sigma <- Sigma[nFit+1:nNew,nFit+1:nNew] - C %*% Sigma[1:nFit,nFit+1:nNew]
+	}
 
-	c_cholSigma <- chol(c_Sigma)
-	c_invSigma <- chol2inv(c_cholSigma)
+	cll <- NA
+	if (gpu) {
+		c_invSigma <- gpuChol2Inv(c_Sigma)
 
-	-Nreps*sum(log(diag(c_cholSigma))) -0.5 * sum(sapply(1:Nreps, function(i) { t(ynew[,i]-c_mu[,i]) %*% c_invSigma %*% (ynew[,i]-c_mu[,i]) }))
+		cll <- -0.5*Nreps*attr(c_invSigma, "log_det") -0.5 * sum(sapply(1:Nreps, function(i) { t(ynew[,i]-c_mu[,i]) %*% c_invSigma %*% (ynew[,i]-c_mu[,i]) }))
+	} else {
+		c_cholSigma <- chol(c_Sigma)
+		c_invSigma <- chol2inv(c_cholSigma)
+
+		cll <- -Nreps*sum(log(diag(c_cholSigma))) -0.5 * sum(sapply(1:Nreps, function(i) { t(ynew[,i]-c_mu[,i]) %*% c_invSigma %*% (ynew[,i]-c_mu[,i]) }))
+	}
 }

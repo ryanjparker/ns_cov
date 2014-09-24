@@ -24,23 +24,38 @@ dat.ns <- list(
 dat.ns$y <- with(dat.ns, (y-mean(y))/sd(y) )
 dat.ns$S <- with(dat.ns, (S + abs(min(S)))/(max(S)-min(S)) )
 
-gridR <- blocks.cluster(dat.ns$S, which_Nr, queen=FALSE)
+#gridR <- blocks.cluster(dat.ns$S, which_Nr, queen=FALSE)
+gridR <- create_blocks(dat.ns$S, 10^2, queen=FALSE)
 Nr    <- length(unique(gridR$B))
 gridB <- blocks.cluster(dat.ns$S, 3^2)
 Nb    <- length(unique(gridB$B))
 
-kn <- 0.08; ks <- 0.73; kr <- 0.08
+if (TRUE) {
+	# plot data
+	#pdf("pdf/ozone/locations.pdf"); plot(x[s[,1]],y[s[,2]]); lines(borders); graphics.off()
+	#pdf("pdf/ozone/locations.pdf"); plot(dat.ns$S[,1],dat.ns$S[,2]); lines(borders); graphics.off()
+	pdf("pdf/ozone/regions.pdf")
+		plot(dat.ns$S[,1],dat.ns$S[,2]); lines(borders);
+		plot(gridR$grid,lty=1,lwd=0.25,border="gray",cex=0.25,add=TRUE)
+	graphics.off()
+	pdf("pdf/ozone/blocks.pdf")
+		plot(dat.ns$S[,1],dat.ns$S[,2]); lines(borders);
+		plot(gridB$grid,lty=1,lwd=0.25,border="gray",cex=0.25,add=TRUE)
+	graphics.off()
+}
+
+kn <- 0.08; ks <- 1.00; kr <- 0.08
 if (which_type == 0) {
-	cov.params <- list(nugget=list(type="single"), psill=list(type="single"), range=list(type="single"))
+	cov.params <- list(nugget=list(type="single"), psill=list(type="fixed"), range=list(type="single"))
 	starts <- list(nugget=kn, psill=sqrt(ks), range=kr)
 } else {
 	cov.params <- list(nugget=list(type="single"), psill=list(type="single"), range=list(type="vary"))
-	starts <- list(nugget=kn, psill=sqrt(ks), range=rep(kr,Nr))
+	starts <- list(nugget=kn, psill=sqrt(ks), range=rep(kr,10^2))
 }
 
 set.seed(311)
 err <- with(dat.ns, {
-	ns_cv(type=which_type, lambda=exp(which_lambda), y=y, S=S, X=X, Nfolds=5, starts=starts, cov.params=cov.params, gridR=gridR, gridB=gridB) #, verbose=TRUE, all=FALSE, parallel=FALSE)
+	ns_cv(type=which_type, lambda=exp(which_lambda), y=y, S=S, X=X, Nfolds=5, starts=starts, cov.params=cov.params, gridR=gridR, gridB=gridB, parallel=TRUE, gpu=FALSE) #, verbose=TRUE, all=FALSE, parallel=FALSE)
 })
 
 save(err, file=paste0("output/ozone/",which_type,"/",which_lambda,"_",which_Nr,".RData"))
@@ -106,7 +121,6 @@ if (FALSE) {
 		plot(dat.ns$S[,1],dat.ns$S[,2]); lines(borders);
 		plot(gridB$grid,lty=1,lwd=0.25,border="gray",cex=0.25,add=TRUE)
 	graphics.off()
-done
 }
 
 # scale data

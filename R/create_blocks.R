@@ -38,9 +38,9 @@ library(deldir)
 			poly.y <- round(c(j,j,j+spacing,j+spacing,j), 4)
 			in_poly <- point.in.polygon(S[,1], S[,2], poly.x, poly.y) >= 1
 
-			if (sum(in_poly) == 0) { next; }
+			#if (sum(in_poly) == 0) { next; }
 
-			B[in_poly] <- b
+			if (sum(in_poly) > 0) B[in_poly] <- b
 
 			# save grid
 			grid <- c(grid,list(Polygons(list(Polygon(cbind(
@@ -84,11 +84,16 @@ library(deldir)
 	ddd <- rdist(sp, km$centers)
 	ks  <- apply(ddd, 1, which.min)
 
+	# order blocks based on proximity to (r.x[1], r.y[1])
+	d <- sort(sqrt((km$centers[,1]-r.x[1])^2 + (km$centers[,2]-r.y[1])^2), index.return=TRUE)
+
 	# create tessellation from centers
-	tv  <- deldir(km$centers[,1], km$centers[,2], dpl=list(ndx=0, ndy=0), rw=c(r.x[1],r.x[2],r.y[1],r.y[2]))
+	tv  <- deldir(km$centers[d$ix,1], km$centers[d$ix,2], dpl=list(ndx=0, ndy=0), rw=c(r.x[1],r.x[2],r.y[1],r.y[2]))
 	tvl <- tile.list(tv)
 
-	B    <- km$cluster
+	# get cluster memberships
+	B   <- km$cluster
+
 	grid <- c()
 	for (b in 1:nblocks) {
 		poly.x <- c(tvl[[b]]$x, tvl[[b]]$x[1])
