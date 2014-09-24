@@ -1534,7 +1534,7 @@ done
 	if (Nreps == 1) y_0 <- as.vector(y_0)
 
 	c_Sigma    <- Sigma[nFit+1:nNew,nFit+1:nNew] - C %*% Sigma[1:nFit,nFit+1:nNew]
-	c_invSigma <- chol2inv(chol(c_Sigma))
+	#c_invSigma <- chol2inv(chol(c_Sigma))
 
 	sd.pred <- sqrt(diag( c_Sigma ))
 

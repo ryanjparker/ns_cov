@@ -54,21 +54,21 @@ source("R/ns_estimate.R")
 
 			# ... non-stationary
 			#res.ns <- eval.ns(design, factors, data, res.s$phi)
-			#res.nsL1 <- eval.ns(design, factors, data, res.s$tau, res.s$sigma, res.s$phi, fuse=TRUE)
-			#nsL1ret <- with(res.nsL1, list(nsL1.success=success, nsL1.elapsed=elapsed,
-			#	nsL1.b0=b0, nsL1.b1=b1, nsL1.b0.cov=b0.cov, nsL1.b1.cov=b1.cov, nsL1.b0.clen=b0.clen, nsL1.b1.clen=b1.clen,
-			#	nsL1.mse.tau=mse.tau, nsL1.mse.sigma=mse.sigma, nsL1.mse.phi=mse.phi, nsL1.c_ll=c_ll, nsL1.mse=mse, nsL1.cov=cov, nsL1.clen=clen, nsL1.lambda=lambda))
+			res.nsL1 <- eval.ns(design, factors, data, res.s$tau, res.s$sigma, res.s$phi, fuse=TRUE)
+			nsL1ret <- with(res.nsL1, list(nsL1.success=success, nsL1.elapsed=elapsed,
+				nsL1.b0=b0, nsL1.b1=b1, nsL1.b0.cov=b0.cov, nsL1.b1.cov=b1.cov, nsL1.b0.clen=b0.clen, nsL1.b1.clen=b1.clen,
+				nsL1.mse.tau=mse.tau, nsL1.mse.sigma=mse.sigma, nsL1.mse.phi=mse.phi, nsL1.c_ll=c_ll, nsL1.mse=mse, nsL1.cov=cov, nsL1.clen=clen, nsL1.lambda=lambda))
 
-			#res.nsL2 <- eval.ns(design, factors, data, res.s$tau, res.s$sigma, res.s$phi, fuse=FALSE)
-			#nsL2ret <- with(res.nsL2, list(nsL2.success=success, nsL2.elapsed=elapsed,
-			#	nsL2.b0=b0, nsL2.b1=b1, nsL2.b0.cov=b0.cov, nsL2.b1.cov=b1.cov, nsL2.b0.clen=b0.clen, nsL2.b1.clen=b1.clen,
-			#	nsL2.mse.tau=mse.tau, nsL2.mse.sigma=mse.sigma, nsL2.mse.phi=mse.phi, nsL2.c_ll=c_ll, nsL2.mse=mse, nsL2.cov=cov, nsL2.clen=clen, nsL2.lambda=lambda))
+			res.nsL2 <- eval.ns(design, factors, data, res.s$tau, res.s$sigma, res.s$phi, fuse=FALSE)
+			nsL2ret <- with(res.nsL2, list(nsL2.success=success, nsL2.elapsed=elapsed,
+				nsL2.b0=b0, nsL2.b1=b1, nsL2.b0.cov=b0.cov, nsL2.b1.cov=b1.cov, nsL2.b0.clen=b0.clen, nsL2.b1.clen=b1.clen,
+				nsL2.mse.tau=mse.tau, nsL2.mse.sigma=mse.sigma, nsL2.mse.phi=mse.phi, nsL2.c_ll=c_ll, nsL2.mse=mse, nsL2.cov=cov, nsL2.clen=clen, nsL2.lambda=lambda))
 
 			# ... kernel-convolutions
 			#res.kc <- eval.kc(design, factors, data)
 
 		# return results
-		r <- c(list(seed=seed, n=factors$n), oret, sret) #, nsL2ret, nsL2ret)
+		r <- c(list(seed=seed, n=factors$n), oret, sret, nsL1ret, nsL2ret)
 		#r <- list(seed=seed, n=factors$n,
 			# oracle results
 			#o.elapsed=res.o$elapsed, o.c_ll=res.o$c_ll, o.mse=res.o$mse, o.cov=res.o$cov, o.clen=res.o$clen #,
@@ -97,6 +97,8 @@ print(round(unlist(r),3))
 "generate_data" <- function(design, factors) {
 	data <- list()
 
+	scale <- c(1,5,5,10)
+
 #cat("Computing Sigma\n")
 	# setup covariance matrix
 	if (factors$data == "stationary") {
@@ -109,27 +111,36 @@ print(round(unlist(r),3))
 		Sigma <- calc_ns_cov(tau=kn, sigma=sqrt(ks), phi=data$phi, Nr=length(data$phi), R=design$d_gridR$B, S=design$S, D2=design$D2)
 	} else if (factors$data == "ns_discrete_nugget") {
 		#data$tau   <- c(0.05, 0.10, 0.10, 0.15)
-		data$tau   <- c(0.05, 1.05, 1.05, 2.05)
+		#data$tau   <- c(0.05, 1.05, 1.05, 2.05)
 		#data$tau   <- c(0.05, 0.5, 0.5, 1.0)
 		#data$sigma <- sqrt(0.95)
 		#data$phi   <- 0.05
 		#data$tau   <- c(2/3, 2/4, 2/4, 2/5)
-		data$sigma <- sqrt(0.95)
-		data$phi   <- 0.05
+		#data$sigma <- sqrt(0.95)
+		#data$phi   <- 0.05
+		data$tau   <- 0.25*scale
+		data$sigma <- sqrt( rep(1,4) )
+		data$phi   <- rep(0.05,4)
 		Sigma <- calc_ns_cov(tau=data$tau, sigma=data$sigma, phi=data$phi, Nr=design$d_Nr, R=design$d_gridR$B, S=design$S, D2=design$D2)
 	} else if (factors$data == "ns_discrete_psill") {
-		data$tau   <- 0.05
-		data$sigma <- sqrt(c(.95,1.90,1.90,2.85))
+		#data$tau   <- 0.05
+		#data$sigma <- sqrt(c(.95,1.90,1.90,2.85))
 		#data$sigma <- sqrt(c(0.95,1.95,1.95,2.95))
-		data$phi   <- 0.05
+		#data$phi   <- 0.05
+		data$tau   <- rep(0.05,4)
+		data$sigma <- sqrt( 0.5*scale )
+		data$phi   <- rep(0.05,4)
 		Sigma <- calc_ns_cov(tau=data$tau, sigma=data$sigma, phi=data$phi, Nr=design$d_Nr, R=design$d_gridR$B, S=design$S, D2=design$D2)
 	} else if (factors$data == "ns_discrete_range") {
-		data$tau   <- 0.05
-		data$sigma <- 1
+		#data$tau   <- 0.05
+		#data$sigma <- 1
 		#data$phi   <- c(0.05, 0.10, 0.10, 0.15)
 		#data$phi   <- c(0.01, 0.10, 0.10, 0.25)
 		#data$phi   <- c(.01, .01, .01, .25, .25, .25, .50, .50, .50)
-		data$phi   <- c(.01, .01, .15, .15)
+		#data$phi   <- c(.01, .01, .15, .15)
+		data$tau   <- rep(0.05,4)
+		data$sigma <- sqrt( rep(1,4) )
+		data$phi   <- 0.01*scale
 		Sigma <- calc_ns_cov(tau=data$tau, sigma=data$sigma, phi=data$phi, Nr=design$d_Nr, R=design$d_gridR$B, S=design$S, D2=design$D2)
 	} else if (factors$data == "ns_discrete_nugget_short") {
 		data$tau   <- c(2/3, 2/4, 2/4, 2/5)
@@ -168,19 +179,19 @@ print(round(unlist(r),3))
 
 #cat("Generating y\n")
 	# generate response
-	#data$b <- c(design$b0, design$b1)
-	data$b <- c(design$b0, design$b1, 20, 30, 40)
+	data$b <- c(design$b0, design$b1)
+	#data$b <- c(design$b0, design$b1, 20, 30, 40)
 	#y <- 
 	#y <- matrix(NA, nrow=factors$n, ncol=factors$Nreps)
 	LSigma <- t(chol(Sigma))
 	#X <- cbind(1, rnorm(factors$n))
 	#Xb <- X %*% data$b
-	X <- array(0, dim=c(factors$n,factors$Nreps,2+3))
+	X <- array(0, dim=c(factors$n,factors$Nreps,2))
 	X[,,1] <- 1
 	X[,,2] <- rnorm(factors$n*factors$Nreps)
-	X[,,3] <- as.integer(design$d_gridR$B==2)
-	X[,,4] <- as.integer(design$d_gridR$B==3)
-	X[,,5] <- as.integer(design$d_gridR$B==4)
+	#X[,,3] <- as.integer(design$d_gridR$B==2)
+	#X[,,4] <- as.integer(design$d_gridR$B==3)
+	#X[,,5] <- as.integer(design$d_gridR$B==4)
 	y <- sapply(1:factors$Nreps, function(rep) {
 		X[,rep,] %*% data$b + LSigma %*% rnorm(factors$n)
 	})
@@ -254,8 +265,8 @@ print(round(unlist(r),3))
 	b1 <- b[2]
 
 	b.se   <- sqrt(diag(bres$bSigma))
-	b.lo   <- b - b.se*1.96
-	b.hi   <- b + b.se*1.96
+	b.lo   <- b - b.se*1.644854
+	b.hi   <- b + b.se*1.644854
 	b.cov  <- as.integer( data$b >= b.lo & data$b <= b.hi )
 	b.clen <- as.vector(b.hi-b.lo)
 #print(round(b,4))
@@ -276,8 +287,8 @@ print(round(unlist(r),3))
   diffs2 <- sapply(1:ncol(data$y.test), function(i) { (preds$y[,i]-data$y.test[,i])^2 })
 	mse <- mean(diffs2)
 
-	lo <- sapply(1:ncol(data$y.test), function(i) { preds$y[,i]-preds$sd*1.96 })
-	hi <- sapply(1:ncol(data$y.test), function(i) { preds$y[,i]+preds$sd*1.96 })
+	lo <- sapply(1:ncol(data$y.test), function(i) { preds$y[,i]-preds$sd*1.644854 })
+	hi <- sapply(1:ncol(data$y.test), function(i) { preds$y[,i]+preds$sd*1.644854 })
 
 	# coverage
 	cov <- mean(as.integer( sapply(1:ncol(data$y.test), function(i) { data$y.test[,i] >= lo[,i] & data$y.test[,i] <= hi[,i] }) ))
@@ -363,8 +374,8 @@ print(round(unlist(r),3))
 		b1 <- beta[2]
 
 		b.se   <- sqrt(diag(bres$bSigma))
-		b.lo   <- beta - b.se*1.96
-		b.hi   <- beta + b.se*1.96
+		b.lo   <- beta - b.se*1.644854
+		b.hi   <- beta + b.se*1.644854
 		b.cov  <- as.integer( data$b >= b.lo & data$b <= b.hi )
 		b.clen <- as.vector(b.hi-b.lo)
 #print(round(beta,4))
@@ -390,8 +401,8 @@ print(round(unlist(r),3))
 	  diffs2 <- sapply(1:ncol(data$y.test), function(i) { (preds$y[,i]-data$y.test[,i])^2 })
 		mse <- mean(diffs2)
 
-		lo <- sapply(1:ncol(data$y.test), function(i) { preds$y[,i]-preds$sd*1.96 })
-		hi <- sapply(1:ncol(data$y.test), function(i) { preds$y[,i]+preds$sd*1.96 })
+		lo <- sapply(1:ncol(data$y.test), function(i) { preds$y[,i]-preds$sd*1.644854 })
+		hi <- sapply(1:ncol(data$y.test), function(i) { preds$y[,i]+preds$sd*1.644854 })
 
 		# coverage
 		cov <- mean(as.integer( sapply(1:ncol(data$y.test), function(i) { data$y.test[,i] >= lo[,i] & data$y.test[,i] <= hi[,i] }) ))
@@ -550,8 +561,8 @@ print(round(unlist(r),3))
 		b1 <- beta[2]
 
 		b.se   <- sqrt(diag(bres$bSigma))
-		b.lo   <- beta - b.se*1.96
-		b.hi   <- beta + b.se*1.96
+		b.lo   <- beta - b.se*1.644854
+		b.hi   <- beta + b.se*1.644854
 		b.cov  <- as.integer( data$b >= b.lo & data$b <= b.hi )
 		b.clen <- as.vector(b.hi-b.lo)
 #print(round(beta,4))
@@ -579,8 +590,8 @@ print(round(unlist(r),3))
 	  diffs2 <- sapply(1:ncol(data$y.test), function(i) { (preds$y[,i]-data$y.test[,i])^2 })
 		mse <- mean(diffs2)
 
-		lo <- sapply(1:ncol(data$y.test), function(i) { preds$y[,i]-preds$sd*1.96 })
-		hi <- sapply(1:ncol(data$y.test), function(i) { preds$y[,i]+preds$sd*1.96 })
+		lo <- sapply(1:ncol(data$y.test), function(i) { preds$y[,i]-preds$sd*1.644854 })
+		hi <- sapply(1:ncol(data$y.test), function(i) { preds$y[,i]+preds$sd*1.644854 })
 
 		# coverage
 		cov <- mean(as.integer( sapply(1:ncol(data$y.test), function(i) { data$y.test[,i] >= lo[,i] & data$y.test[,i] <= hi[,i] }) ))
@@ -629,7 +640,8 @@ sim.factors <- expand.grid(
 	#Nreps=50,
 	# amount of data to generate
 	#n=23^2, nt=100
-	n=39^2, nt=500
+	#n=39^2, nt=500
+	n=40^2, nt=600
 	#n=50^2, nt=500
 )
 

@@ -1,5 +1,8 @@
 # perform a simple analysis of sim study results
 
+b0 <- 100
+b1 <- 1
+
 for (i in 3:3) {
 	Nparts <- 20
 	if (Nparts > 1) {
@@ -57,17 +60,17 @@ for (i in 3:3) {
 
 	cat("==============\n")
 	cat("rmse b0:\n")
-	with(gres, cat("O = ",round(sqrt(mean(o.b0^2)),2),"\n",sep=""))
-	with(gres, cat("S = ",round(sqrt(mean(s.b0^2)),2),", ",round(sqrt(mean(s.b0^2)/mean(o.b0^2)),2),"\n",sep=""))
-	with(gres, cat("NS L1 = ",round(sqrt(mean(nsL1.b0^2)),2),", ",round(sqrt(mean(nsL1.b0^2)/mean(o.b0^2)),2),"\n",sep=""))
-	with(gres, cat("NS L2 = ",round(sqrt(mean(nsL2.b0^2)),2),", ",round(sqrt(mean(nsL2.b0^2)/mean(o.b0^2)),2),"\n",sep=""))
+	with(gres, cat("O = ",round(sqrt(mean((o.b0-b0)^2)),2),"\n",sep=""))
+	with(gres, cat("S = ",round(sqrt(mean((s.b0-b0)^2)),2),", ",round(sqrt(mean((s.b0-b0)^2)/mean((o.b0-b0)^2)),2),"\n",sep=""))
+	with(gres, cat("NS L1 = ",round(sqrt(mean((nsL1.b0-b0)^2)),2),", ",round(sqrt(mean((nsL1.b0-b0)^2)/mean((o.b0-b0)^2)),2),"\n",sep=""))
+	with(gres, cat("NS L2 = ",round(sqrt(mean((nsL2.b0-b0)^2)),2),", ",round(sqrt(mean((nsL2.b0-b0)^2)/mean((o.b0-b0)^2)),2),"\n",sep=""))
 
 	cat("==============\n")
 	cat("rmse b1:\n")
-	with(gres, cat("O = ",round(sqrt(mean((o.b1-1)^2)),2),"\n",sep=""))
-	with(gres, cat("S = ",round(sqrt(mean((s.b1-1)^2)),2),", ",round(sqrt(mean((s.b1-1)^2)/mean((o.b1-1)^2)),2),"\n",sep=""))
-	with(gres, cat("NS L1 = ",round(sqrt(mean((nsL1.b1-1)^2)),2),", ",round(sqrt(mean((nsL1.b1-1)^2)/mean((o.b1-1)^2)),2),"\n",sep=""))
-	with(gres, cat("NS L2 = ",round(sqrt(mean((nsL2.b1-1)^2)),2),", ",round(sqrt(mean((nsL2.b1-1)^2)/mean((o.b1-1)^2)),2),"\n",sep=""))
+	with(gres, cat("O = ",round(sqrt(mean((o.b1-b1)^2)),2),"\n",sep=""))
+	with(gres, cat("S = ",round(sqrt(mean((s.b1-b1)^2)),2),", ",round(sqrt(mean((s.b1-b1)^2)/mean((o.b1-b1)^2)),2),"\n",sep=""))
+	with(gres, cat("NS L1 = ",round(sqrt(mean((nsL1.b1-b1)^2)),2),", ",round(sqrt(mean((nsL1.b1-b1)^2)/mean((o.b1-b1)^2)),2),"\n",sep=""))
+	with(gres, cat("NS L2 = ",round(sqrt(mean((nsL2.b1-b1)^2)),2),", ",round(sqrt(mean((nsL2.b1-b1)^2)/mean((o.b1-b1)^2)),2),"\n",sep=""))
 
 	cat("==============\n")
 	cat("cov b0:\n")
@@ -106,10 +109,10 @@ for (i in 3:3) {
 
 	cat("==============\n")
 	cat("rmse prediction:\n")
-	with(gres, cat("O = ",round(sqrt(mean(o.mse)),2),"\n",sep=""))
-	with(gres, cat("S = ",round(sqrt(mean(s.mse)),2),", ",round(sqrt(mean(s.mse)/mean(o.mse)),2),"\n",sep=""))
-	with(gres, cat("NS L1 = ",round(sqrt(mean(nsL1.mse)),2),", ",round(sqrt(mean(nsL1.mse)/mean(o.mse)),2),"\n",sep=""))
-	with(gres, cat("NS L2 = ",round(sqrt(mean(nsL2.mse)),2),", ",round(sqrt(mean(nsL2.mse)/mean(o.mse)),2),"\n",sep=""))
+	with(gres, cat("O = ",round(sqrt(mean(o.mse)),3),"\n",sep=""))
+	with(gres, cat("S = ",round(sqrt(mean(s.mse)),3),", ",round(sqrt(mean(s.mse)/mean(o.mse)),3),"\n",sep=""))
+	with(gres, cat("NS L1 = ",round(sqrt(mean(nsL1.mse)),3),", ",round(sqrt(mean(nsL1.mse)/mean(o.mse)),3),"\n",sep=""))
+	with(gres, cat("NS L2 = ",round(sqrt(mean(nsL2.mse)),3),", ",round(sqrt(mean(nsL2.mse)/mean(o.mse)),3),"\n",sep=""))
 
 	cat("==============\n")
 	cat("cov prediction:\n")
