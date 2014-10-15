@@ -1,7 +1,7 @@
 # estimate parameters in NS models
 #library(gstat)
 library(parallel)
-library(spacious)
+#library(spacious)
 
 "ns_estimate_all" <- function(lambda, y, X, S, R, Rn, B, Bn, D, D2,
 	cov.params, inits, weights,

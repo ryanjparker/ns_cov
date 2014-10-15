@@ -12,9 +12,9 @@ source("R/ns_estimate.R")
 	R, Rn, B, Bn,
 	verbose=TRUE, all=FALSE, parallel=FALSE, gpu=FALSE
 ) {
-	n <- dim(y)[1]
+	n        <- dim(y)[1]
 	Nlambdas <- length(lambdas)
-	Nr <- max(gridR$B)
+	Nr       <- max(Rn)
 
 	# create holdout set
 	in.h <- sample(1:n, 100)

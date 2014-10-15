@@ -3,7 +3,7 @@
 b0 <- 100
 b1 <- 1
 
-for (i in 3:3) {
+for (i in 2:2) {
 	Nparts <- 20
 	if (Nparts > 1) {
 		cer <- data.frame()
