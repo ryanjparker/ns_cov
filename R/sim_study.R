@@ -6,6 +6,7 @@ library(multicore)
 source("R/create_blocks.R")
 source("R/ns_cov.R")
 source("R/ns_estimate.R")
+source("R/adapt_weights.R")
 
 # function to execte the simulation study based on given factors
 "sim_exp" <- function(design, factors, which.exp, which.part) {
@@ -54,12 +55,12 @@ source("R/ns_estimate.R")
 
 			# ... non-stationary
 			#res.ns <- eval.ns(design, factors, data, res.s$phi)
-			res.nsL1 <- eval.ns(design, factors, data, res.s$tau, res.s$sigma, res.s$phi, fuse=TRUE)
+			res.nsL1 <- eval.ns(design, factors, data, mean(data$tau), mean(data$sigma), mean(data$phi), fuse=TRUE)
 			nsL1ret <- with(res.nsL1, list(nsL1.success=success, nsL1.elapsed=elapsed,
 				nsL1.b0=b0, nsL1.b1=b1, nsL1.b0.cov=b0.cov, nsL1.b1.cov=b1.cov, nsL1.b0.clen=b0.clen, nsL1.b1.clen=b1.clen,
 				nsL1.mse.tau=mse.tau, nsL1.mse.sigma=mse.sigma, nsL1.mse.phi=mse.phi, nsL1.c_ll=c_ll, nsL1.mse=mse, nsL1.cov=cov, nsL1.clen=clen, nsL1.lambda=lambda))
 
-			res.nsL2 <- eval.ns(design, factors, data, res.s$tau, res.s$sigma, res.s$phi, fuse=FALSE)
+			res.nsL2 <- eval.ns(design, factors, data, mean(data$tau), mean(data$sigma), mean(data$phi), fuse=FALSE)
 			nsL2ret <- with(res.nsL2, list(nsL2.success=success, nsL2.elapsed=elapsed,
 				nsL2.b0=b0, nsL2.b1=b1, nsL2.b0.cov=b0.cov, nsL2.b1.cov=b1.cov, nsL2.b0.clen=b0.clen, nsL2.b1.clen=b1.clen,
 				nsL2.mse.tau=mse.tau, nsL2.mse.sigma=mse.sigma, nsL2.mse.phi=mse.phi, nsL2.c_ll=c_ll, nsL2.mse=mse, nsL2.cov=cov, nsL2.clen=clen, nsL2.lambda=lambda))
@@ -69,6 +70,8 @@ source("R/ns_estimate.R")
 
 		# return results
 		r <- c(list(seed=seed, n=factors$n), oret, sret, nsL1ret, nsL2ret)
+		#r <- c(list(seed=seed, n=factors$n), nsL1ret)
+		#r <- c(list(seed=seed, n=factors$n), nsL1ret, nsL2ret)
 		#r <- list(seed=seed, n=factors$n,
 			# oracle results
 			#o.elapsed=res.o$elapsed, o.c_ll=res.o$c_ll, o.mse=res.o$mse, o.cov=res.o$cov, o.clen=res.o$clen #,
@@ -320,7 +323,7 @@ print(round(unlist(r),3))
 	try({
 		fit <- with(data, ns_estimate_all(
 			lambda=0, y=y.train, X=X.train, S=design$S[which.train,],
-			R=rep(1, n.train), Rn=NULL,
+			R=rep(1, n.train), Rn=1,
 			B=design$gridB$B[-which.test], Bn=design$gridB$neighbors,
     	cov.params=list(nugget=list(type="single"), psill=list(type="single"), range=list(type="single")),
 			inits=list(nugget=mean(tau), psill=mean(sigma), range=mean(phi)),
@@ -328,7 +331,6 @@ print(round(unlist(r),3))
 		) )
 
 	})
-#print(fit)
 
 	# see if we have a good fit
 	success <- TRUE
@@ -425,8 +427,27 @@ print(round(unlist(r),3))
 "eval.ns" <- function(design, factors, data, init.tau, init.sigma, init.phi, fuse) {
 	t1 <- proc.time()
 
-	# which sequence of lambdas do we use to fit?
+	init.tau   <- rep(init.tau, design$Nr)
+	init.sigma <- rep(init.sigma, design$Nr)
+	init.phi   <- rep(init.phi, design$Nr)
+
+if (TRUE) {
+	# adapt weights
 	lambdas <- exp( 4:(-4) )
+	weights <- with(data, ns_adapt_w(fuse=fuse, lambdas=lambdas,
+		y=y.train, X=X.train, S=(design$S[-which.test,]),
+		R=(design$gridR$B[-which.test]), Rn=design$gridR$neighbors,
+		B=(design$gridB$B[-which.test]), Bn=design$gridB$neighbors,
+		starts=list(nugget=init.tau, psill=init.sigma, range=init.phi),
+		verbose=TRUE, parallel=FALSE
+	))
+} else {
+	weights <- list(nugget=54.59815, psill=0.01831564, range=7.389056)
+}
+print(weights)
+
+	# which sequence of lambdas do we use to fit?
+	lambdas <- exp( 2:(-4) )
 	Nlambdas <- length(lambdas)
 	err <- rep(NA, Nlambdas)
 	taus <- vector("list", Nlambdas)
@@ -437,10 +458,6 @@ print(round(unlist(r),3))
 	in.h <- sample(1:data$n.train, 100)
 	n.h <- length(in.h)
 	n.nh <- data$n.train-n.h
-
-	init.tau   <- rep(init.tau, design$Nr)
-	init.sigma <- rep(init.sigma, design$Nr)
-	init.phi   <- rep(init.phi, design$Nr)
 
 	# find best lambda
 	for (lambda in lambdas) {
@@ -455,7 +472,7 @@ print(round(unlist(r),3))
 				B=(design$gridB$B[-which.test])[-in.h], Bn=design$gridB$neighbors,
     		cov.params=list(nugget=list(type="vary"), psill=list(type="vary"), range=list(type="vary")),
 				inits=list(nugget=init.tau, psill=init.sigma, range=init.phi),
-				verbose=TRUE, parallel=FALSE, fuse=fuse, all=FALSE
+				verbose=TRUE, parallel=FALSE, fuse=fuse, all=FALSE, weights=unlist(weights)
 			) )
 
 			if (fit$conv == 1) {
@@ -626,7 +643,7 @@ sim.design <- list(
 	# number of obs per block in BCL
 	Nb=50,
 	# coefficients
-	b0=100, b1=1
+	b0=0, b1=1
 )
 
 sim.factors <- expand.grid(
@@ -646,8 +663,8 @@ sim.factors <- expand.grid(
 )
 
 if (TRUE) {
-	options(cores=1)
-	options(mc.cores=1)
+	options(cores=4)
+	options(mc.cores=4)
 
 	# run the experiment for each combination of factors
 	#res <- lapply(1:1, function(i) { #nrow(sim.factors), function(i) {

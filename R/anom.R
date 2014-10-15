@@ -31,10 +31,18 @@ if (which_type == 0) {
 } else {
 	#cov.params <- list(nugget=list(type="vary"), psill=list(type="vary"), range=list(type="vary"))
 	#starts <- list(nugget=rep(kn,Nr), psill=rep(sqrt(ks),Nr), range=rep(kr,Nr))
-	cov.params <- list(nugget=list(type="vary"), psill=list(type="fixed"), range=list(type="vary"))
-	starts <- list(nugget=rep(kn,Nr), psill=sqrt(ks), range=rep(kr,Nr))
+	#cov.params <- list(nugget=list(type="vary"), psill=list(type="fixed"), range=list(type="vary"))
+	#starts <- list(nugget=rep(kn,Nr), psill=sqrt(ks), range=rep(kr,Nr))
+
+	cov.params <- list(nugget=list(type="vary"), psill=list(type="single"), range=list(type="single"))
+	starts <- list(nugget=rep(kn,Nr), psill=sqrt(ks), range=kr)
+	#cov.params <- list(nugget=list(type="single"), psill=list(type="vary"), range=list(type="single"))
+	#starts <- list(nugget=kn, psill=rep(sqrt(ks),Nr), range=rep(kr,Nr))
+	#cov.params <- list(nugget=list(type="single"), psill=list(type="single"), range=list(type="vary"))
+	#starts <- list(nugget=kn, psill=sqrt(ks), range=rep(kr,Nr))
 }
 
+if (FALSE) {
 options(cores=4); options(mc.cores=4)
 
 set.seed(311)
@@ -44,6 +52,7 @@ err <- with(dat.ns, {
 })
 
 save(err, file=paste0("output/anom/",which_type,"/",which_lambda,"_",which_Nr,".RData"))
+}
 
 if (FALSE) { ###
 
@@ -106,7 +115,7 @@ if (FALSE) {
 		fuse=FALSE,verbose=TRUE)
 }
 
-if (TRUE) {
+if (FALSE) {
 	# make plots
 	library(ggmap)
 	library(maps)
@@ -217,7 +226,7 @@ if (TRUE) {
 done
 }
 
-if (FALSE) { # predict on a holdout set
+if (TRUE) { # predict on a holdout set
 	cat("Holdout test\n")
 	set.seed(1983)
 	#in.h <- round(seq(1, n, len=round(0.1*n)))

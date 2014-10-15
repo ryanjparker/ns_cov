@@ -30,7 +30,7 @@ Nr    <- length(unique(gridR$B))
 gridB <- blocks.cluster(dat.ns$S, 3^2)
 Nb    <- length(unique(gridB$B))
 
-if (TRUE) {
+if (FALSE) {
 	# plot data
 	#pdf("pdf/ozone/locations.pdf"); plot(x[s[,1]],y[s[,2]]); lines(borders); graphics.off()
 	#pdf("pdf/ozone/locations.pdf"); plot(dat.ns$S[,1],dat.ns$S[,2]); lines(borders); graphics.off()
@@ -43,6 +43,8 @@ if (TRUE) {
 		plot(gridB$grid,lty=1,lwd=0.25,border="gray",cex=0.25,add=TRUE)
 	graphics.off()
 }
+
+if (FALSE) {
 
 kn <- 0.08; ks <- 1.00; kr <- 0.08
 if (which_type == 0) {
@@ -60,7 +62,7 @@ err <- with(dat.ns, {
 
 save(err, file=paste0("output/ozone/",which_type,"/",which_lambda,"_",which_Nr,".RData"))
 
-if (FALSE) { ### ONLY SIMS
+} else { ### ONLY SIMS
 
 
 library(fields)
@@ -98,8 +100,7 @@ dat.ns <- list(
 	S=cbind(x[s[keep,1]], y[s[keep,2]])
 )
 
-options(cores=1)
-options(mc.cores=1)
+options(cores=4); options(mc.cores=4)
 
 # create grid for params and BCL
 #gridR <- create_blocks(dat.ns$S, 5^2, queen=FALSE)
@@ -478,15 +479,19 @@ if (FALSE) { # fit specific lambda
 			if (type == 1) fuse <- TRUE else fuse <- FALSE
 
 			starts <- list(
-				nugget=rep(kn,length(unique(gridR$B[-in.h]))),
-				psill=rep(sqrt(ks),length(unique(gridR$B[-in.h]))),
-				range=rep(kr,length(unique(gridR$B[-in.h])))
+				#nugget=rep(kn,length(unique(gridR$B[-in.h]))), psill=rep(sqrt(ks),length(unique(gridR$B[-in.h]))), range=rep(kr,length(unique(gridR$B[-in.h])))
+				nugget=rep(kn,length(unique(gridR$B[-in.h]))), psill=sqrt(ks), range=kr
+				#nugget=kn, psill=rep(sqrt(ks),length(unique(gridR$B[-in.h]))), range=kr
+				#nugget=kn, psill=sqrt(ks), range=rep(kr,length(unique(gridR$B[-in.h])))
 			)
 			try({
 				fit <- ns_estimate_all(lambda=exp(which_lambda),y=y[-in.h,],X=X[-in.h,,,drop=FALSE],S=S[-in.h,],R=gridR$B[-in.h],Rn=gridR$neighbors,B=gridB$B[-in.h],Bn=gridB$neighbors,
-					cov.params=list(nugget=list(type="vary"), psill=list(type="vary"), range=list(type="vary")),
+					#cov.params=list(nugget=list(type="vary"), psill=list(type="vary"), range=list(type="vary")),
+					cov.params=list(nugget=list(type="vary"), psill=list(type="single"), range=list(type="single")),
+					#cov.params=list(nugget=list(type="single"), psill=list(type="vary"), range=list(type="single")),
+					#cov.params=list(nugget=list(type="single"), psill=list(type="single"), range=list(type="vary")),
 					inits=list(nugget=starts$nugget, psill=starts$psill, range=starts$range),
-					fuse=fuse,verbose=TRUE,all=FALSE,parallel=FALSE)
+					fuse=fuse,verbose=TRUE,all=FALSE,parallel=TRUE)
 				c_ll <- ns_cond_ll(X[-in.h,,,drop=FALSE], X[in.h,,,drop=FALSE], y[-in.h,], y[in.h,], fit$beta, fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], gridR$B[-in.h], gridR$B[in.h])
 				preds <- ns_full_pred(X[-in.h,,,drop=FALSE], X[in.h,,,drop=FALSE], y[-in.h,], fit$beta, fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], gridR$B[-in.h], gridR$B[in.h])
 				diffs2 <- sapply(1:ncol(y), function(i) { (preds$y[,i]-y[in.h,i])^2 })
@@ -499,7 +504,7 @@ if (FALSE) { # fit specific lambda
 	save(err, file=paste0("output/ozone/",type,"/",which_lambda,"_",which_Nr,".RData"))
 }
 
-if (FALSE) { # predict on a holdout set
+if (TRUE) { # predict on a holdout set
 	cat("Holdout test\n")
 	set.seed(1983)
 	#in.h <- round(seq(1, n, len=round(0.1*n)))
@@ -515,41 +520,45 @@ if (FALSE) { # predict on a holdout set
 
 	#lambdas <- c(10000,1000,500,100,50,10,5,2,1,.5,.1)
 	#lambdas <- c(100,50,25,10,5,1,.5,.1,.05,.01)
-	#lambdas <- exp( 4:(-4) )
+	lambdas <- exp( 4:(-4) )
 	#lambdas <- exp( c(6,5.5,5,4.5) )
 	#lambdas <- exp( 6:2 )
 	#lambdas <- exp( 4:1 )
 	#lambdas <- exp( (-4):(-7) )
-	#err <- matrix(NA, nrow=2*length(lambdas)+1, ncol=4)
+	err <- matrix(NA, nrow=2*length(lambdas)+1, ncol=4)
 
 	y <- dat.ns$y
 	S <- dat.ns$S
 	X <- dat.ns$X
 
 	# fit stationary model
-	fit <- ns_estimate_all(lambda=0,y=y[-in.h,],X=X[-in.h,,],S=S[-in.h,],R=rep(1,n.nh),Rn=gridR$neighbors,B=gridB$B[-in.h],Bn=gridB$neighbors,
+	fit <- ns_estimate_all(lambda=0,y=y[-in.h,],X=X[-in.h,,,drop=FALSE],S=S[-in.h,],R=rep(1,n.nh),Rn=gridR$neighbors,B=gridB$B[-in.h],Bn=gridB$neighbors,
 		cov.params=list(nugget=list(type="single"), psill=list(type="single"), range=list(type="single")),
 		inits=list(nugget=kn, psill=sqrt(ks), range=kr),
 		verbose=TRUE,parallel=TRUE)
 
-	c_ll <- ns_cond_ll(X[-in.h,,], X[in.h,,], y[-in.h,], y[in.h,], fit$beta, fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], rep(1, length=n.nh), rep(1, length=n.h))
-	preds <- ns_full_pred(X[-in.h,,], X[in.h,,], y[-in.h,], fit$beta, fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], rep(1, length=n.nh), rep(1, length=n.h))
+	c_ll <- ns_cond_ll(X[-in.h,,,drop=FALSE], X[in.h,,,drop=FALSE], y[-in.h,], y[in.h,], fit$beta, fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], rep(1, length=n.nh), rep(1, length=n.h))
+	preds <- ns_full_pred(X[-in.h,,,drop=FALSE], X[in.h,,,drop=FALSE], y[-in.h,], fit$beta, fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], rep(1, length=n.nh), rep(1, length=n.h))
 	diffs2 <- sapply(1:ncol(y), function(i) { (preds$y[,i]-y[in.h,i])^2 })
 	err[1,1] <- c_ll
 	err[1,2] <- mean(diffs2)
 	err[1,3] <- sd(diffs2)/sqrt(length(diffs2))
 	err[1,4] <- 1 - sum(diffs2)/sum( (preds$y-mean(y[in.h,]))^2 )
 	print(round(err[1,],6))
-	starts.L1 <- starts.L2 <- list(nugget=rep(fit$tau,max(gridR$B)), psill=rep(fit$sigma,max(gridR$B)), range=rep(fit$phi,max(gridR$B)))
+	#starts.L1 <- starts.L2 <- list(nugget=rep(fit$tau,max(gridR$B)), psill=rep(fit$sigma,max(gridR$B)), range=rep(fit$phi,max(gridR$B)))
+	#starts.L1 <- starts.L2 <- list(nugget=rep(fit$tau,max(gridR$B)), psill=fit$sigma, range=fit$phi)
+	#starts.L1 <- starts.L2 <- list(nugget=fit$tau, psill=rep(fit$sigma,max(gridR$B)), range=fit$phi)
+	starts.L1 <- starts.L2 <- list(nugget=fit$tau, psill=fit$sigma, range=rep(fit$phi,max(gridR$B)))
 
 	for (lambda in lambdas) {
 		try({
-			fit <- ns_estimate_all(lambda=lambda,y=y[-in.h,],X=X[-in.h,,],S=S[-in.h,],R=gridR$B[-in.h],Rn=gridR$neighbors,B=gridB$B[-in.h],Bn=gridB$neighbors,
+done
+			fit <- ns_estimate_all(lambda=lambda,y=y[-in.h,],X=X[-in.h,,,drop=FALSE],S=S[-in.h,],R=gridR$B[-in.h],Rn=gridR$neighbors,B=gridB$B[-in.h],Bn=gridB$neighbors,
 				cov.params=list(nugget=list(type="vary"), psill=list(type="vary"), range=list(type="vary")),
 				inits=list(nugget=starts.L1$nugget, psill=starts.L1$psill, range=starts.L1$range),
 				fuse=TRUE,verbose=TRUE,all=FALSE)
-			c_ll <- ns_cond_ll(X[-in.h,,], X[in.h,,], y[-in.h,], y[in.h,], fit$beta, fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], gridR$B[-in.h], gridR$B[in.h])
-			preds <- ns_full_pred(X[-in.h,,], X[in.h,,], y[-in.h,], fit$beta, fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], gridR$B[-in.h], gridR$B[in.h])
+			c_ll <- ns_cond_ll(X[-in.h,,,drop=FALSE], X[in.h,,,drop=FALSE], y[-in.h,], y[in.h,], fit$beta, fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], gridR$B[-in.h], gridR$B[in.h])
+			preds <- ns_full_pred(X[-in.h,,,drop=FALSE], X[in.h,,,drop=FALSE], y[-in.h,], fit$beta, fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], gridR$B[-in.h], gridR$B[in.h])
 			diffs2 <- sapply(1:ncol(y), function(i) { (preds$y[,i]-y[in.h,i])^2 })
 			err[1+which(lambdas==lambda),1] <- c_ll
 			err[1+which(lambdas==lambda),2] <- mean(diffs2)
@@ -560,12 +569,15 @@ if (FALSE) { # predict on a holdout set
 		print(round(err[1+which(lambdas==lambda),],6))
 
 		try({
-			fit <- ns_estimate_all(lambda=lambda,y=y[-in.h,],X=X[-in.h,,],S=S[-in.h,],R=gridR$B[-in.h],Rn=gridR$neighbors,B=gridB$B[-in.h],Bn=gridB$neighbors,
-				cov.params=list(nugget=list(type="vary"), psill=list(type="vary"), range=list(type="vary")),
+			fit <- ns_estimate_all(lambda=lambda,y=y[-in.h,],X=X[-in.h,,,drop=FALSE],S=S[-in.h,],R=gridR$B[-in.h],Rn=gridR$neighbors,B=gridB$B[-in.h],Bn=gridB$neighbors,
+				#cov.params=list(nugget=list(type="vary"), psill=list(type="vary"), range=list(type="vary")),
+				#cov.params=list(nugget=list(type="vary"), psill=list(type="single"), range=list(type="single")),
+				#cov.params=list(nugget=list(type="single"), psill=list(type="vary"), range=list(type="single")),
+				cov.params=list(nugget=list(type="single"), psill=list(type="single"), range=list(type="vary")),
 				inits=list(nugget=starts.L2$nugget, psill=starts.L2$psill, range=starts.L2$range),
 				fuse=FALSE,verbose=TRUE,all=FALSE)
-			c_ll <- ns_cond_ll(X[-in.h,,], X[in.h,,], y[-in.h,], y[in.h,], fit$beta, fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], gridR$B[-in.h], gridR$B[in.h])
-			preds <- ns_full_pred(X[-in.h,,], X[in.h,,], y[-in.h,], fit$beta, fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], gridR$B[-in.h], gridR$B[in.h])
+			c_ll <- ns_cond_ll(X[-in.h,,,drop=FALSE], X[in.h,,,drop=FALSE], y[-in.h,], y[in.h,], fit$beta, fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], gridR$B[-in.h], gridR$B[in.h])
+			preds <- ns_full_pred(X[-in.h,,,drop=FALSE], X[in.h,,,drop=FALSE], y[-in.h,], fit$beta, fit$tau, fit$sigma, fit$phi, S[-in.h,], S[in.h,], gridR$B[-in.h], gridR$B[in.h])
 			diffs2 <- sapply(1:ncol(y), function(i) { (preds$y[,i]-y[in.h,i])^2 })
 			err[1+length(lambdas)+which(lambdas==lambda),1] <- c_ll
 			err[1+length(lambdas)+which(lambdas==lambda),2] <- mean(diffs2)

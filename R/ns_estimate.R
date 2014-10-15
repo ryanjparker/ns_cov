@@ -4,8 +4,8 @@ library(parallel)
 library(spacious)
 
 "ns_estimate_all" <- function(lambda, y, X, S, R, Rn, B, Bn, D, D2,
-	cov.params, inits,
-	fuse=FALSE, verbose=FALSE, all=FALSE, parallel=TRUE
+	cov.params, inits, weights,
+	fuse=FALSE, verbose=FALSE, all=FALSE, parallel=TRUE, log_penalty=TRUE
 ) {
 	# estimates NS parameters with penalty lambda
 	#  y: observed data
@@ -23,6 +23,9 @@ library(spacious)
 	# - usage: list(nugget=x, ...)
 	# fuse: use L1 regularization when true
 	# verbose: show output at each iteration
+	# all: jointly update all(!) params
+	# parallel: parallelize some operations
+	# log_penalty: penalize differences on log(param) scale?
 
 	#####################################################################
 	# parameters:
@@ -134,6 +137,9 @@ library(spacious)
 	if (length(tau)   != Ntau  ) stop(paste0("Error with tau init. Found ",length(tau),"; expected ",Ntau,"\n"))
 	if (length(sigma) != Nsigma) stop(paste0("Error with sigma init. Found ",length(sigma),"; expected ",Nsigma,"\n"))
 	if (length(phi)   != Nphi  ) stop(paste0("Error with phi init. Found ",length(phi),"; expected ",Nphi,"\n"))
+
+	if (missing(weights)) weights <- rep(1, 3)
+	rwids <- list(tau=1, sigma=2, phi=3)  # weight IDs; use rwids["tau"], etc.
 
 	# compute distance matrices if they are not specified
 	if (missing(D)) {
@@ -377,9 +383,11 @@ library(spacious)
 			if (Ntau > 1) {
 				for (r in 1:Ntau) {
 					if (!fuse) {
-						u[r] <- u[r] -2*lambda*sum(ltau[r] - ltau[ which.Rn[[r]] ])
+						if (log_penalty) u[r] <- u[r] -2*lambda*weights[1]*sum(ltau[r] - ltau[ which.Rn[[r]] ])
+						else             u[r] <- u[r] -2*lambda*weights[1]*tau[r]*sum(tau[r] - tau[ which.Rn[[r]] ])
 					} else {
-						u[r] <- u[r] -2*sum( (ig_tau[ which.neigh[r,!is.na(which.neigh[r,])] ]) * (ltau[r] - ltau[ which.Rn[[r]] ]) )
+						if (log_penalty) u[r] <- u[r] -2*weights[1]*sum( (ig_tau[ which.neigh[r,!is.na(which.neigh[r,])] ]) * (ltau[r] - ltau[ which.Rn[[r]] ]) )
+						else             u[r] <- u[r] -2*weights[1]*tau[r]*sum( (ig_tau[ which.neigh[r,!is.na(which.neigh[r,])] ]) * (tau[r] - tau[ which.Rn[[r]] ]) )
 					}
 				}
 			}
@@ -388,9 +396,11 @@ library(spacious)
 				o <- Ntau
 				for (r in 1:Nsigma) {
 					if (!fuse) {
-						u[r+o] <- u[r+o] -2*lambda*sum(lsigma[r] - lsigma[ which.Rn[[r]] ])
+						if (log_penalty) u[r+o] <- u[r+o] -2*lambda*weights[2]*sum(lsigma[r] - lsigma[ which.Rn[[r]] ])
+						else             u[r+o] <- u[r+o] -2*lambda*weights[2]*sigma[r]*sum(sigma[r] - sigma[ which.Rn[[r]] ])
 					} else {
-						u[r+o] <- u[r+o] -2*sum( (ig_sigma[ which.neigh[r,!is.na(which.neigh[r,])] ]) * (lsigma[r] - lsigma[ which.Rn[[r]] ]) )
+						if (log_penalty) u[r+o] <- u[r+o] -2*weights[2]*sum( (ig_sigma[ which.neigh[r,!is.na(which.neigh[r,])] ]) * (lsigma[r] - lsigma[ which.Rn[[r]] ]) )
+						else             u[r+o] <- u[r+o] -2*weights[2]*sigma[r]*sum( (ig_sigma[ which.neigh[r,!is.na(which.neigh[r,])] ]) * (sigma[r] - sigma[ which.Rn[[r]] ]) )
 					}
 				}
 			}
@@ -399,9 +409,11 @@ library(spacious)
 				o <- Ntau+Nsigma
 				for (r in 1:Nphi) {
 					if (!fuse) {
-						u[r+o] <- u[r+o] -2*lambda*sum(lphi[r] - lphi[ which.Rn[[r]] ])
+						if (log_penalty) u[r+o] <- u[r+o] -2*lambda*weights[3]*sum(lphi[r] - lphi[ which.Rn[[r]] ])
+						else             u[r+o] <- u[r+o] -2*lambda*weights[3]*phi[r]*sum(phi[r] - phi[ which.Rn[[r]] ])
 					} else {
-						u[r+o] <- u[r+o] -2*sum( (ig_phi[ which.neigh[r,!is.na(which.neigh[r,])] ]) * (lphi[r] - lphi[ which.Rn[[r]] ]) )
+						if (log_penalty) u[r+o] <- u[r+o] -2*weights[3]*sum( (ig_phi[ which.neigh[r,!is.na(which.neigh[r,])] ]) * (lphi[r] - lphi[ which.Rn[[r]] ]) )
+						else             u[r+o] <- u[r+o] -2*weights[3]*phi[r]*sum( (ig_phi[ which.neigh[r,!is.na(which.neigh[r,])] ]) * (phi[r] - phi[ which.Rn[[r]] ]) )
 					}
 				}
 			}
@@ -414,31 +426,56 @@ library(spacious)
 				else if (r <= Nall)        { ris <- "phi";   ir <- r-Ntau-Nsigma }
 				else stop("Bad combination.")
 
-				jdx <- 1
 				sapply(r:Nall, function(s) {
 					if (s <= Ntau)             { sis <- "tau";   is <- r }
 					else if (s <= Ntau+Nsigma) { sis <- "sigma"; is <- r-Ntau }
 					else if (s <= Nall)        { sis <- "phi";   is <- r-Ntau-Nsigma }
 					else stop("Bad combination.")
 
-					if (r==s) {
-						if (!fuse) {
-							H[index] <<- H[index] +2*lambda*length(which.Rn[[ir]])
-						} else {
-							if (ris=="tau")   H[index] <<- H[index] +2*sum( (ig_tau[ which.neigh[ir,!is.na(which.neigh[ir,])] ]) )
-							if (ris=="sigma") H[index] <<- H[index] +2*sum( (ig_sigma[ which.neigh[ir,!is.na(which.neigh[ir,])] ]) )
-							if (ris=="phi")   H[index] <<- H[index] +2*sum( (ig_phi[ which.neigh[ir,!is.na(which.neigh[ir,])] ]) )
+					if (ris != sis) next;  # cross elements are 0
+
+					if (log_penalty) {
+						if (r==s) {
+							if (!fuse) {
+								H[index] <<- H[index] +2*lambda*weights[rwids[ris]]*length(which.Rn[[ir]])
+							} else {
+								if (ris=="tau")   H[index] <<- H[index] +2*weights[1]*sum( (ig_tau[ which.neigh[ir,!is.na(which.neigh[ir,])] ]) )
+								if (ris=="sigma") H[index] <<- H[index] +2*weights[2]*sum( (ig_sigma[ which.neigh[ir,!is.na(which.neigh[ir,])] ]) )
+								if (ris=="phi")   H[index] <<- H[index] +2*weights[3]*sum( (ig_phi[ which.neigh[ir,!is.na(which.neigh[ir,])] ]) )
+							}
+						} else if (sum(which.Rn[[ir]]==s) > 0) {
+							if (!fuse) {
+								H[index] <<- H[index] -2*lambda*weights[rwids[ris]]
+							} else {
+								if (ris=="tau")   H[index] <<- H[index] -2*weights[1]*(ig_tau[ which.neigh[ir,is] ])
+								if (ris=="sigma") H[index] <<- H[index] -2*weights[2]*(ig_sigma[ which.neigh[ir,is] ])
+								if (ris=="phi")   H[index] <<- H[index] -2*weights[3]*(ig_phi[ which.neigh[ir,is] ])
+							}
 						}
-					} else if (sum(which.Rn[[ir]]==s) > 0) {
-						if (!fuse) {
-							H[index] <<- H[index] -2*lambda
-						} else {
-							if (ris=="tau")   H[index] <<- H[index] -2*(ig_tau[ which.neigh[ir,is] ])
-							if (ris=="sigma") H[index] <<- H[index] -2*(ig_sigma[ which.neigh[ir,is] ])
-							if (ris=="phi")   H[index] <<- H[index] -2*(ig_phi[ which.neigh[ir,is] ])
+					} else {
+						if (r==s) {
+							if (!fuse) {
+								if (ris=="tau")   H[index] <<- H[index] +2*lambda*weights[1]*tau[ir]*sum(2*tau[r] - tau[ which.Rn[[ir]] ])
+								if (ris=="sigma") H[index] <<- H[index] +2*lambda*weights[2]*sigma[ir]*sum(2*sigma[r] - sigma[ which.Rn[[ir]] ])
+								if (ris=="phi")   H[index] <<- H[index] +2*lambda*weights[3]*phi[ir]*sum(2*phi[r] - phi[ which.Rn[[ir]] ])
+							} else {
+								if (ris=="tau")   H[index] <<- H[index] +2*weights[1]*tau[ir]*sum( (ig_tau[ which.neigh[ir,!is.na(which.neigh[ir,])] ]) * (tau[ir]-tau[ which.Rn[[ir]] ]) )
+								if (ris=="sigma") H[index] <<- H[index] +2*weights[2]*sigma[ir]*sum( (ig_sigma[ which.neigh[ir,!is.na(which.neigh[ir,])] ]) * (sigma[ir]-sigma[ which.Rn[[ir]] ]) )
+								if (ris=="phi")   H[index] <<- H[index] +2*weights[3]*phi[ir]*sum( (ig_phi[ which.neigh[ir,!is.na(which.neigh[ir,])] ]) * (phi[ir]-phi[ which.Rn[[ir]] ]) )
+							}
+						} else if (sum(which.Rn[[ir]]==s) > 0) {
+							if (!fuse) {
+								if (ris=="tau")   H[index] <<- H[index] -2*lambda*weights[1]*tau[ir]*tau[is]
+								if (ris=="sigma") H[index] <<- H[index] -2*lambda*weights[2]*sigma[ir]*sigma[is]
+								if (ris=="phi")   H[index] <<- H[index] -2*lambda*weights[3]*phi[ir]*phi[is]
+							} else {
+								if (ris=="tau")   H[index] <<- H[index] -2*weights[1]*(ig_tau[ which.neigh[ir,is] ])*tau[ir]*tau[is]
+								if (ris=="sigma") H[index] <<- H[index] -2*weights[2]*(ig_sigma[ which.neigh[ir,is] ])*sigma[ir]*sigma[is]
+								if (ris=="phi")   H[index] <<- H[index] -2*weights[3]*(ig_phi[ which.neigh[ir,is] ])*phi[ir]*phi[is]
+							}
 						}
-						jdx <<- jdx+1
 					}
+
 					index <<- index+1
 				})
 			})
@@ -540,31 +577,38 @@ library(spacious)
 			# ... to score
 			for (r in 1:Ntau) {
 				if (!fuse) {
-					u[r] <- u[r] -2*lambda*sum(ltau[r] - ltau[ which.Rn[[r]] ])
+					if (log_penalty) u[r] <- u[r] -2*lambda*weights[1]*sum(ltau[r] - ltau[ which.Rn[[r]] ])
+					else             u[r] <- u[r] -2*lambda*weights[1]*tau[r]*sum(tau[r] - tau[ which.Rn[[r]] ])
 				} else {
-					u[r] <- u[r] -2*sum( (ig_tau[ which.neigh[r,!is.na(which.neigh[r,])] ]) * (ltau[r] - ltau[ which.Rn[[r]] ]) )
+					if (log_penalty) u[r] <- u[r] -2*weights[1]*sum( (ig_tau[ which.neigh[r,!is.na(which.neigh[r,])] ]) * (ltau[r] - ltau[ which.Rn[[r]] ]) )
+					else             u[r] <- u[r] -2*weights[1]*tau[r]*sum( (ig_tau[ which.neigh[r,!is.na(which.neigh[r,])] ]) * (tau[r] - tau[ which.Rn[[r]] ]) )
 				}
 			}
 
 			# ... to Hessian
 			index <- 1
 			sapply(1:Ntau, function(r) {
-				jdx <- 1
 				sapply(r:Ntau, function(s) {
-					if (r==s) {
-						if (!fuse) {
-							H[index] <<- H[index] +2*lambda*length(which.Rn[[r]])
-						} else {
-							H[index] <<- H[index] +2*sum( (ig_tau[ which.neigh[r,!is.na(which.neigh[r,])] ]) )
+					if (log_penalty) {
+						if (r==s) {
+							if (!fuse) H[index] <<- H[index] +2*lambda*weights[1]*length(which.Rn[[r]])
+							else       H[index] <<- H[index] +2*weights[1]*sum( (ig_tau[ which.neigh[r,!is.na(which.neigh[r,])] ]) )
+						} else if (sum(which.Rn[[r]]==s) > 0) {
+							if (!fuse) H[index] <<- H[index] -2*weights[1]*lambda
+							else       H[index] <<- H[index] -2*weights[1]*(ig_tau[ which.neigh[r,s] ])
 						}
-					} else if (sum(which.Rn[[r]]==s) > 0) {
-						if (!fuse) {
-							H[index] <<- H[index] -2*lambda
-						} else {
-							H[index] <<- H[index] -2*(ig_tau[ which.neigh[r,s] ])
+					} else {
+#if (ris=="tau")   H[index] <<- H[index] +2*lambda*weights[1]*tau[ir]*sum(2*tau[r] - tau[ which.Rn[[ir]] ])
+#if (ris=="tau")   H[index] <<- H[index] +2*weights[1]*tau[ir]*sum( (ig_tau[ which.neigh[ir,!is.na(which.neigh[ir,])] ]) * (tau[ir]-tau[ which.Rn[[ir]] ]) )
+						if (r==s) {
+							if (!fuse) H[index] <<- H[index] +2*lambda*weights[1]*length(which.Rn[[r]])
+							else       H[index] <<- H[index] +2*weights[1]*sum( (ig_tau[ which.neigh[r,!is.na(which.neigh[r,])] ]) )
+						} else if (sum(which.Rn[[r]]==s) > 0) {
+							if (!fuse) H[index] <<- H[index] -2*weights[1]*lambda
+							else       H[index] <<- H[index] -2*weights[1]*(ig_tau[ which.neigh[r,s] ])
 						}
-						jdx <<- jdx+1
 					}
+
 					index <<- index+1
 				})
 			})
@@ -670,9 +714,9 @@ library(spacious)
 			# ... to score
 			for (r in 1:Nsigma) {
 				if (!fuse) {
-					u[r] <- u[r] -2*lambda*sum(lsigma[r] - lsigma[ which.Rn[[r]] ])
+					u[r] <- u[r] -2*lambda*weights[2]*sum(lsigma[r] - lsigma[ which.Rn[[r]] ])
 				} else {
-					u[r] <- u[r] -2*sum( (ig_sigma[ which.neigh[r,!is.na(which.neigh[r,])] ]) * (lsigma[r] - lsigma[ which.Rn[[r]] ]) )
+					u[r] <- u[r] -2*weights[2]*sum( (ig_sigma[ which.neigh[r,!is.na(which.neigh[r,])] ]) * (lsigma[r] - lsigma[ which.Rn[[r]] ]) )
 				}
 			}
 
@@ -683,15 +727,15 @@ library(spacious)
 				sapply(r:Nsigma, function(s) {
 					if (r==s) {
 						if (!fuse) {
-							H[index] <<- H[index] +2*lambda*length(which.Rn[[r]])
+							H[index] <<- H[index] +2*lambda*weights[2]*length(which.Rn[[r]])
 						} else {
-							H[index] <<- H[index] +2*sum( (ig_sigma[ which.neigh[r,!is.na(which.neigh[r,])] ]) )
+							H[index] <<- H[index] +2*weights[2]*sum( (ig_sigma[ which.neigh[r,!is.na(which.neigh[r,])] ]) )
 						}
 					} else if (sum(which.Rn[[r]]==s) > 0) {
 						if (!fuse) {
-							H[index] <<- H[index] -2*lambda
+							H[index] <<- H[index] -2*lambda*weights[2]
 						} else {
-							H[index] <<- H[index] -2*(ig_sigma[ which.neigh[r,s] ])
+							H[index] <<- H[index] -2*weights[2]*(ig_sigma[ which.neigh[r,s] ])
 						}
 						jdx <<- jdx+1
 					}
@@ -796,9 +840,9 @@ library(spacious)
 			# ... to score
 			for (r in 1:Nphi) {
 				if (!fuse) {
-					u[r] <- u[r] -2*lambda*sum(lphi[r] - lphi[ which.Rn[[r]] ])
+					u[r] <- u[r] -2*lambda*weights[3]*sum(lphi[r] - lphi[ which.Rn[[r]] ])
 				} else {
-					u[r] <- u[r] -2*sum( (ig_phi[ which.neigh[r,!is.na(which.neigh[r,])] ]) * (lphi[r] - lphi[ which.Rn[[r]] ]) )
+					u[r] <- u[r] -2*weights[3]*sum( (ig_phi[ which.neigh[r,!is.na(which.neigh[r,])] ]) * (lphi[r] - lphi[ which.Rn[[r]] ]) )
 				}
 			}
 
@@ -809,15 +853,15 @@ library(spacious)
 				sapply(r:Nphi, function(s) {
 					if (r==s) {
 						if (!fuse) {
-							H[index] <<- H[index] +2*lambda*length(which.Rn[[r]])
+							H[index] <<- H[index] +2*lambda*weights[3]*length(which.Rn[[r]])
 						} else {
-							H[index] <<- H[index] +2*sum( (ig_phi[ which.neigh[r,!is.na(which.neigh[r,])] ]) )
+							H[index] <<- H[index] +2*weights[3]*sum( (ig_phi[ which.neigh[r,!is.na(which.neigh[r,])] ]) )
 						}
 					} else if (sum(which.Rn[[r]]==s) > 0) {
 						if (!fuse) {
-							H[index] <<- H[index] -2*lambda
+							H[index] <<- H[index] -2*lambda*weights[3]
 						} else {
-							H[index] <<- H[index] -2*(ig_phi[ which.neigh[r,s] ])
+							H[index] <<- H[index] -2*weights[3]*(ig_phi[ which.neigh[r,s] ])
 						}
 						jdx <<- jdx+1
 					}
@@ -905,14 +949,14 @@ library(spacious)
 		if (Nr <= 1) {
 			res <- 0
 		} else if (!fuse) {
-			if (Ntau   > 1) res <- res+sum((  ltau[Rn[,1]] -   ltau[Rn[,2]])^2)
-			if (Nsigma > 1) res <- res+sum((lsigma[Rn[,1]] - lsigma[Rn[,2]])^2)
-			if (Nphi   > 1) res <- res+sum((  lphi[Rn[,1]] -   lphi[Rn[,2]])^2)
+			if (Ntau   > 1) res <- res+weights[1]*sum((  ltau[Rn[,1]] -   ltau[Rn[,2]])^2)
+			if (Nsigma > 1) res <- res+weights[2]*sum((lsigma[Rn[,1]] - lsigma[Rn[,2]])^2)
+			if (Nphi   > 1) res <- res+weights[3]*sum((  lphi[Rn[,1]] -   lphi[Rn[,2]])^2)
 			res <- lambda*res
 		} else if (fuse) {
-			if (Ntau   > 1) res <- res+sum(abs(  ltau[Rn[,1]] -   ltau[Rn[,2]]))
-			if (Nsigma > 1) res <- res+sum(abs(lsigma[Rn[,1]] - lsigma[Rn[,2]]))
-			if (Nphi   > 1) res <- res+sum(abs(  lphi[Rn[,1]] -   lphi[Rn[,2]]))
+			if (Ntau   > 1) res <- res+weights[1]*sum(abs(  ltau[Rn[,1]] -   ltau[Rn[,2]]))
+			if (Nsigma > 1) res <- res+weights[2]*sum(abs(lsigma[Rn[,1]] - lsigma[Rn[,2]]))
+			if (Nphi   > 1) res <- res+weights[3]*sum(abs(  lphi[Rn[,1]] -   lphi[Rn[,2]]))
 			res <- lambda*res
 		} else {
 			stop("Should we add penalty?")
