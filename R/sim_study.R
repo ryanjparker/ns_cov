@@ -432,22 +432,37 @@ print(round(unlist(r),3))
 	init.phi   <- rep(init.phi, design$Nr)
 
 if (TRUE) {
-	# adapt weights
 	lambdas <- exp( 4:(-4) )
-	weights <- with(data, ns_adapt_w(fuse=fuse, lambdas=lambdas,
+
+	# identify fixed parameters
+	afixed <- with(data, ns_adapt_fixed(fuse=fuse, lambda=lambdas[1],
 		y=y.train, X=X.train, S=(design$S[-which.test,]),
 		R=(design$gridR$B[-which.test]), Rn=design$gridR$neighbors,
 		B=(design$gridB$B[-which.test]), Bn=design$gridB$neighbors,
 		starts=list(nugget=init.tau, psill=init.sigma, range=init.phi),
 		verbose=TRUE, parallel=FALSE
 	))
+
+if (FALSE) {
+	# adapt weights
+	#lambdas <- c(Inf, exp( 4:(-4) ))
+	#weights <- with(data, ns_adapt_w(fuse=fuse, lambdas=lambdas,
+	weights <- with(data, ns_adapt_fixed(fuse=fuse, lambda=lambdas[1],
+		y=y.train, X=X.train, S=(design$S[-which.test,]),
+		R=(design$gridR$B[-which.test]), Rn=design$gridR$neighbors,
+		B=(design$gridB$B[-which.test]), Bn=design$gridB$neighbors,
+		starts=list(nugget=init.tau, psill=init.sigma, range=init.phi),
+		verbose=TRUE, parallel=TRUE
+	))
+}
+
 } else {
 	weights <- list(nugget=54.59815, psill=0.01831564, range=7.389056)
 }
-print(weights)
+#print(weights)
 
 	# which sequence of lambdas do we use to fit?
-	lambdas <- exp( 2:(-4) )
+	lambdas <- exp( 4:(-4) )
 	Nlambdas <- length(lambdas)
 	err <- rep(NA, Nlambdas)
 	taus <- vector("list", Nlambdas)
@@ -470,9 +485,10 @@ print(weights)
 				lambda=lambda, y=y.train[-in.h,], X=X.train[-in.h,,], S=(design$S[-which.test,])[-in.h,],
 				R=(design$gridR$B[-which.test])[-in.h], Rn=design$gridR$neighbors,
 				B=(design$gridB$B[-which.test])[-in.h], Bn=design$gridB$neighbors,
-    		cov.params=list(nugget=list(type="vary"), psill=list(type="vary"), range=list(type="vary")),
-				inits=list(nugget=init.tau, psill=init.sigma, range=init.phi),
-				verbose=TRUE, parallel=FALSE, fuse=fuse, all=FALSE, weights=unlist(weights)
+    		#cov.params=list(nugget=list(type="vary"), psill=list(type="vary"), range=list(type="vary")),
+				#inits=list(nugget=init.tau, psill=init.sigma, range=init.phi),
+    		cov.params=afixed$cov.params, inits=afixed$inits,
+				verbose=TRUE, parallel=FALSE, fuse=fuse, all=FALSE #, weights=unlist(weights)
 			) )
 
 			if (fit$conv == 1) {
@@ -541,8 +557,9 @@ print(weights)
 				lambda=lambda.best, y=y.train, X=X.train, S=design$S[-which.test,],
 				R=design$gridR$B[-which.test], Rn=design$gridR$neighbors,
 				B=design$gridB$B[-which.test], Bn=design$gridB$neighbors,
-    		cov.params=list(nugget=list(type="vary"), psill=list(type="vary"), range=list(type="vary")),
-				inits=list(nugget=init.tau, psill=init.sigma, range=init.phi),
+    		#cov.params=list(nugget=list(type="vary"), psill=list(type="vary"), range=list(type="vary")),
+				#inits=list(nugget=init.tau, psill=init.sigma, range=init.phi),
+    		cov.params=afixed$cov.params, inits=afixed$inits,
 				verbose=TRUE, parallel=FALSE, fuse=fuse
 			) )
 		})
@@ -585,13 +602,13 @@ print(weights)
 #print(round(beta,4))
 #print(round(b.lo,4))
 
-		if (length(data$tau) == 1) mse.tau   <- mean( (tau-data$tau)^2 )
+		if (length(data$tau) == 1 || length(tau) == 1) mse.tau <- mean( (tau-data$tau)^2 )
 		else mse.tau   <- mean( (tau-data$tau[c(1,1,2,2,1,1,2,2,3,3,4,4,3,3,4,4)])^2 )
 
-		if (length(data$sigma) == 1) mse.sigma   <- mean( (sigma-data$sigma)^2 )
+		if (length(data$sigma) == 1 || length(sigma) == 1) mse.sigma   <- mean( (sigma-data$sigma)^2 )
 		else mse.sigma   <- mean( (sigma-data$sigma[c(1,1,2,2,1,1,2,2,3,3,4,4,3,3,4,4)])^2 )
 
-		if (length(data$phi) == 1) mse.phi   <- mean( (phi-data$phi)^2 )
+		if (length(data$phi) == 1 || length(phi) == 1) mse.phi   <- mean( (phi-data$phi)^2 )
 		else mse.phi   <- mean( (phi-data$phi[c(1,1,2,2,1,1,2,2,3,3,4,4,3,3,4,4)])^2 )
 
 		# conditional log-likelihood

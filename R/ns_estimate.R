@@ -952,12 +952,12 @@ library(parallel)
 			if (Ntau   > 1) res <- res+weights[1]*sum((  ltau[Rn[,1]] -   ltau[Rn[,2]])^2)
 			if (Nsigma > 1) res <- res+weights[2]*sum((lsigma[Rn[,1]] - lsigma[Rn[,2]])^2)
 			if (Nphi   > 1) res <- res+weights[3]*sum((  lphi[Rn[,1]] -   lphi[Rn[,2]])^2)
-			res <- lambda*res
+			res <- ifelse(lambda==Inf, 0, lambda*res)
 		} else if (fuse) {
 			if (Ntau   > 1) res <- res+weights[1]*sum(abs(  ltau[Rn[,1]] -   ltau[Rn[,2]]))
 			if (Nsigma > 1) res <- res+weights[2]*sum(abs(lsigma[Rn[,1]] - lsigma[Rn[,2]]))
 			if (Nphi   > 1) res <- res+weights[3]*sum(abs(  lphi[Rn[,1]] -   lphi[Rn[,2]]))
-			res <- lambda*res
+			res <- ifelse(lambda==Inf, 0, lambda*res)
 		} else {
 			stop("Should we add penalty?")
 		}
@@ -1068,6 +1068,7 @@ library(parallel)
 				}
 #ll <- loglik(tau, sigma, phi); pll <- ll -penalty(ltau, lsigma, lphi); cat("after range:",pll,"\n")
 			}
+
 		}
 
 		if (hasX) {
@@ -1091,7 +1092,8 @@ library(parallel)
 		# have we converged?
 		test.parms <- list(prev=c(prev.ltau,prev.lsigma,prev.lphi), new=c(ltau,lsigma,lphi))
 
-		if ( abs(pll - prev.pll)/(1 + abs(pll)) <= tol || max( abs(test.parms$new-test.parms$prev)/(1+abs(test.parms$new)) ) <= tol ) {
+		#if ( abs(pll - prev.pll)/(1 + abs(pll)) <= tol || max( abs(test.parms$new-test.parms$prev)/(1+abs(test.parms$new)) ) <= tol ) {
+		if ( abs(ll - prev.ll)/(1 + abs(ll)) <= tol || max( abs(test.parms$new-test.parms$prev)/(1+abs(test.parms$new)) ) <= tol ) {
 			if (verbose) {
 				cat("Converged at iteration",iter,"\n")
 				show_iter(iter, pll, ll, beta, tau, sigma, phi)
