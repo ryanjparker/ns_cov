@@ -1,14 +1,14 @@
 # perform a simple analysis of sim study results
 
-b0 <- 100
+b0 <- 0
 b1 <- 1
 
-for (i in 2:2) {
+for (i in 3:3) {
 	Nparts <- 20
 	if (Nparts > 1) {
 		cer <- data.frame()
 		for (part in 1:Nparts) {
-		#for (part in (1:Nparts)[-c(4,8,16,20)]) {
+		#for (part in (1:Nparts)[-c(10)]) {
 			load(paste0("output/exp_",i,"_",part,".RData"))
 			cer <- rbind(cer, exp_res)
 		}
@@ -60,75 +60,75 @@ for (i in 2:2) {
 
 	cat("==============\n")
 	cat("rmse b0:\n")
-	with(gres, cat("O = ",round(sqrt(mean((o.b0-b0)^2)),2),"\n",sep=""))
-	with(gres, cat("S = ",round(sqrt(mean((s.b0-b0)^2)),2),", ",round(sqrt(mean((s.b0-b0)^2)/mean((o.b0-b0)^2)),2),"\n",sep=""))
-	with(gres, cat("NS L1 = ",round(sqrt(mean((nsL1.b0-b0)^2)),2),", ",round(sqrt(mean((nsL1.b0-b0)^2)/mean((o.b0-b0)^2)),2),"\n",sep=""))
-	with(gres, cat("NS L2 = ",round(sqrt(mean((nsL2.b0-b0)^2)),2),", ",round(sqrt(mean((nsL2.b0-b0)^2)/mean((o.b0-b0)^2)),2),"\n",sep=""))
+	with(gres, cat("O = ",round(sqrt(median((o.b0-b0)^2)),2),"\n",sep=""))
+	with(gres, cat("S = ",round(sqrt(median((s.b0-b0)^2)),2),", ",round(sqrt(median((s.b0-b0)^2)/median((o.b0-b0)^2)),2),"\n",sep=""))
+	with(gres, cat("NS L1 = ",round(sqrt(median((nsL1.b0-b0)^2)),2),", ",round(sqrt(median((nsL1.b0-b0)^2)/median((o.b0-b0)^2)),2),"\n",sep=""))
+	with(gres, cat("NS L2 = ",round(sqrt(median((nsL2.b0-b0)^2)),2),", ",round(sqrt(median((nsL2.b0-b0)^2)/median((o.b0-b0)^2)),2),"\n",sep=""))
 
 	cat("==============\n")
 	cat("rmse b1:\n")
-	with(gres, cat("O = ",round(sqrt(mean((o.b1-b1)^2)),2),"\n",sep=""))
-	with(gres, cat("S = ",round(sqrt(mean((s.b1-b1)^2)),2),", ",round(sqrt(mean((s.b1-b1)^2)/mean((o.b1-b1)^2)),2),"\n",sep=""))
-	with(gres, cat("NS L1 = ",round(sqrt(mean((nsL1.b1-b1)^2)),2),", ",round(sqrt(mean((nsL1.b1-b1)^2)/mean((o.b1-b1)^2)),2),"\n",sep=""))
-	with(gres, cat("NS L2 = ",round(sqrt(mean((nsL2.b1-b1)^2)),2),", ",round(sqrt(mean((nsL2.b1-b1)^2)/mean((o.b1-b1)^2)),2),"\n",sep=""))
+	with(gres, cat("O = ",round(sqrt(median((o.b1-b1)^2)),2),"\n",sep=""))
+	with(gres, cat("S = ",round(sqrt(median((s.b1-b1)^2)),2),", ",round(sqrt(median((s.b1-b1)^2)/median((o.b1-b1)^2)),2),"\n",sep=""))
+	with(gres, cat("NS L1 = ",round(sqrt(median((nsL1.b1-b1)^2)),2),", ",round(sqrt(median((nsL1.b1-b1)^2)/median((o.b1-b1)^2)),2),"\n",sep=""))
+	with(gres, cat("NS L2 = ",round(sqrt(median((nsL2.b1-b1)^2)),2),", ",round(sqrt(median((nsL2.b1-b1)^2)/median((o.b1-b1)^2)),2),"\n",sep=""))
 
 	cat("==============\n")
 	cat("cov b0:\n")
-	with(gres, cat("O = ",mean(o.b0.cov),",\n",sep=""))
-	with(gres, cat("S = ",mean(s.b0.cov),",\n",sep=""))
-	with(gres, cat("NS L1 = ",mean(nsL1.b0.cov),",\n",sep=""))
-	with(gres, cat("NS L2 = ",mean(nsL2.b0.cov),",\n",sep=""))
+	with(gres, cat("O = ",median(o.b0.cov),",\n",sep=""))
+	with(gres, cat("S = ",median(s.b0.cov),",\n",sep=""))
+	with(gres, cat("NS L1 = ",median(nsL1.b0.cov),",\n",sep=""))
+	with(gres, cat("NS L2 = ",median(nsL2.b0.cov),",\n",sep=""))
 
 	cat("==============\n")
 	cat("cov b1:\n")
-	with(gres, cat("O = ",mean(o.b1.cov),",\n",sep=""))
-	with(gres, cat("S = ",mean(s.b1.cov),",\n",sep=""))
-	with(gres, cat("NS L1 = ",mean(nsL1.b1.cov),",\n",sep=""))
-	with(gres, cat("NS L2 = ",mean(nsL2.b1.cov),",\n",sep=""))
+	with(gres, cat("O = ",median(o.b1.cov),",\n",sep=""))
+	with(gres, cat("S = ",median(s.b1.cov),",\n",sep=""))
+	with(gres, cat("NS L1 = ",median(nsL1.b1.cov),",\n",sep=""))
+	with(gres, cat("NS L2 = ",median(nsL2.b1.cov),",\n",sep=""))
 
 	cat("==============\n")
 	cat("irmse tau:\n")
-	#with(gres, cat("O = ",round(sqrt(mean(o.mse.tau)),2),"\n",sep=""))
-	with(gres, cat("S = ",round(sqrt(mean(s.mse.tau)),2),", ",round(sqrt(mean(s.mse.tau)/mean(s.mse.tau)),2),"\n",sep=""))
-	with(gres, cat("NS L1 = ",round(sqrt(mean(nsL1.mse.tau)),2),", ",round(sqrt(mean(nsL1.mse.tau)/mean(s.mse.tau)),2),"\n",sep=""))
-	with(gres, cat("NS L2 = ",round(sqrt(mean(nsL2.mse.tau)),2),", ",round(sqrt(mean(nsL2.mse.tau)/mean(s.mse.tau)),2),"\n",sep=""))
+	#with(gres, cat("O = ",round(sqrt(median(o.mse.tau)),2),"\n",sep=""))
+	with(gres, cat("S = ",round(sqrt(median(s.mse.tau)),2),", ",round(sqrt(median(s.mse.tau)/median(s.mse.tau)),2),"\n",sep=""))
+	with(gres, cat("NS L1 = ",round(sqrt(median(nsL1.mse.tau)),2),", ",round(sqrt(median(nsL1.mse.tau)/median(s.mse.tau)),2),"\n",sep=""))
+	with(gres, cat("NS L2 = ",round(sqrt(median(nsL2.mse.tau)),2),", ",round(sqrt(median(nsL2.mse.tau)/median(s.mse.tau)),2),"\n",sep=""))
 
 	cat("==============\n")
 	cat("irmse sigma:\n")
-	#with(gres, cat("O = ",round(sqrt(mean(o.mse.sigma)),2),"\n",sep=""))
-	with(gres, cat("S = ",round(sqrt(mean(s.mse.sigma)),2),", ",round(sqrt(mean(s.mse.sigma)/mean(s.mse.sigma)),2),"\n",sep=""))
-	with(gres, cat("NS L1 = ",round(sqrt(mean(nsL1.mse.sigma)),2),", ",round(sqrt(mean(nsL1.mse.sigma)/mean(s.mse.sigma)),2),"\n",sep=""))
-	with(gres, cat("NS L2 = ",round(sqrt(mean(nsL2.mse.sigma)),2),", ",round(sqrt(mean(nsL2.mse.sigma)/mean(s.mse.sigma)),2),"\n",sep=""))
+	#with(gres, cat("O = ",round(sqrt(median(o.mse.sigma)),2),"\n",sep=""))
+	with(gres, cat("S = ",round(sqrt(median(s.mse.sigma)),2),", ",round(sqrt(median(s.mse.sigma)/median(s.mse.sigma)),2),"\n",sep=""))
+	with(gres, cat("NS L1 = ",round(sqrt(median(nsL1.mse.sigma)),2),", ",round(sqrt(median(nsL1.mse.sigma)/median(s.mse.sigma)),2),"\n",sep=""))
+	with(gres, cat("NS L2 = ",round(sqrt(median(nsL2.mse.sigma)),2),", ",round(sqrt(median(nsL2.mse.sigma)/median(s.mse.sigma)),2),"\n",sep=""))
 
 	cat("==============\n")
 	cat("irmse phi:\n")
-	#with(gres, cat("O = ",round(sqrt(mean(o.mse.phi)),2),"\n",sep=""))
-	with(gres, cat("S = ",round(sqrt(mean(s.mse.phi)),3),", ",round(sqrt(mean(s.mse.phi)/mean(s.mse.phi)),2),"\n",sep=""))
-	with(gres, cat("NS L1 = ",round(sqrt(mean(nsL1.mse.phi)),3),", ",round(sqrt(mean(nsL1.mse.phi)/mean(s.mse.phi)),2),"\n",sep=""))
-	with(gres, cat("NS L2 = ",round(sqrt(mean(nsL2.mse.phi)),3),", ",round(sqrt(mean(nsL2.mse.phi)/mean(s.mse.phi)),2),"\n",sep=""))
+	#with(gres, cat("O = ",round(sqrt(median(o.mse.phi)),2),"\n",sep=""))
+	with(gres, cat("S = ",round(sqrt(median(s.mse.phi)),3),", ",round(sqrt(median(s.mse.phi)/median(s.mse.phi)),2),"\n",sep=""))
+	with(gres, cat("NS L1 = ",round(sqrt(median(nsL1.mse.phi)),3),", ",round(sqrt(median(nsL1.mse.phi)/median(s.mse.phi)),2),"\n",sep=""))
+	with(gres, cat("NS L2 = ",round(sqrt(median(nsL2.mse.phi)),3),", ",round(sqrt(median(nsL2.mse.phi)/median(s.mse.phi)),2),"\n",sep=""))
 
 	cat("==============\n")
 	cat("rmse prediction:\n")
-	with(gres, cat("O = ",round(sqrt(mean(o.mse)),3),"\n",sep=""))
-	with(gres, cat("S = ",round(sqrt(mean(s.mse)),3),", ",round(sqrt(mean(s.mse)/mean(o.mse)),3),"\n",sep=""))
-	with(gres, cat("NS L1 = ",round(sqrt(mean(nsL1.mse)),3),", ",round(sqrt(mean(nsL1.mse)/mean(o.mse)),3),"\n",sep=""))
-	with(gres, cat("NS L2 = ",round(sqrt(mean(nsL2.mse)),3),", ",round(sqrt(mean(nsL2.mse)/mean(o.mse)),3),"\n",sep=""))
+	with(gres, cat("O = ",round(sqrt(median(o.mse)),3),"\n",sep=""))
+	with(gres, cat("S = ",round(sqrt(median(s.mse)),3),", ",round(sqrt(median(s.mse)/median(o.mse)),3),"\n",sep=""))
+	with(gres, cat("NS L1 = ",round(sqrt(median(nsL1.mse)),3),", ",round(sqrt(median(nsL1.mse)/median(o.mse)),3),"\n",sep=""))
+	with(gres, cat("NS L2 = ",round(sqrt(median(nsL2.mse)),3),", ",round(sqrt(median(nsL2.mse)/median(o.mse)),3),"\n",sep=""))
 
 	cat("==============\n")
 	cat("cov prediction:\n")
-	with(gres, cat("O = ",mean(o.cov),",\n",sep=""))
-	with(gres, cat("S = ",mean(s.cov),",\n",sep=""))
-	with(gres, cat("NS L1 = ",mean(nsL1.cov),",\n",sep=""))
-	with(gres, cat("NS L2 = ",mean(nsL2.cov),",\n",sep=""))
+	with(gres, cat("O = ",median(o.cov),",\n",sep=""))
+	with(gres, cat("S = ",median(s.cov),",\n",sep=""))
+	with(gres, cat("NS L1 = ",median(nsL1.cov),",\n",sep=""))
+	with(gres, cat("NS L2 = ",median(nsL2.cov),",\n",sep=""))
 
 done
 
 	cat("==============\n")
 	cat("Computing time:\n")
-	cat("O = ",mean(gres$o.elapsed),", (", min(gres$o.elapsed), ", ", max(gres$o.elapsed), ")\n",sep="")
-	cat("S = ",mean(gres$s.elapsed),", (", min(gres$s.elapsed), ", ", max(gres$s.elapsed), ")\n",sep="")
-	cat("NS L1 = ",mean(gres$nsL1.elapsed)/60,", (", min(gres$nsL1.elapsed)/60, ", ", max(gres$nsL1.elapsed)/60, ")\n", sep="")
-	cat("NS L2 = ",mean(gres$nsL2.elapsed)/60,", (", min(gres$nsL2.elapsed)/60, ", ", max(gres$nsL2.elapsed)/60, ")\n", sep="")
+	cat("O = ",median(gres$o.elapsed),", (", min(gres$o.elapsed), ", ", max(gres$o.elapsed), ")\n",sep="")
+	cat("S = ",median(gres$s.elapsed),", (", min(gres$s.elapsed), ", ", max(gres$s.elapsed), ")\n",sep="")
+	cat("NS L1 = ",median(gres$nsL1.elapsed)/60,", (", min(gres$nsL1.elapsed)/60, ", ", max(gres$nsL1.elapsed)/60, ")\n", sep="")
+	cat("NS L2 = ",median(gres$nsL2.elapsed)/60,", (", min(gres$nsL2.elapsed)/60, ", ", max(gres$nsL2.elapsed)/60, ")\n", sep="")
 	cat("SE: O=",sd(gres$o.elapsed)/sqrt(Ngood),", S=",sd(gres$s.elapsed)/sqrt(Ngood),", NS L1=",sd(gres$nsL1.elapsed)/sqrt(Ngood),", NS L2=",sd(gres$nsL2.elapsed)/sqrt(Ngood),"\n",sep="")
 	#print(t.test(gres$ns.elapsed/60,gres$s.elapsed/60,paired=T))
 
