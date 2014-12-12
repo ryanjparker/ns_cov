@@ -2,11 +2,14 @@
 library(fields)
 library(MASS)
 library(multicore)
+library(lhs)
+library(numDeriv)
 
 source("R/create_blocks.R")
 source("R/ns_cov.R")
 source("R/ns_estimate.R")
 source("R/adapt_weights.R")
+source("R/fit_cv.R")
 
 # function to execte the simulation study based on given factors
 "sim_exp" <- function(design, factors, which.exp, which.part) {
@@ -51,19 +54,21 @@ source("R/adapt_weights.R")
 			res.s  <- eval.s(design, factors, data)
 			sret <- with(res.s, list(s.success=success, s.elapsed=elapsed,
 				s.b0=b0, s.b1=b1, s.b0.cov=b0.cov, s.b1.cov=b1.cov, s.b0.clen=b0.clen, s.b1.clen=b1.clen,
-				s.mse.tau=mse.tau, s.mse.sigma=mse.sigma, s.mse.phi=mse.phi, s.c_ll=c_ll, s.mse=mse, s.cov=cov, s.clen=clen))
+				s.mse.tau=mse.tau, s.mse.sigma=mse.sigma, s.mse.phi=mse.phi, s.frob=frob, s.c_ll=c_ll, s.mse=mse, s.cov=cov, s.clen=clen))
 
 			# ... non-stationary
 			#res.ns <- eval.ns(design, factors, data, res.s$phi)
 			res.nsL1 <- eval.ns(design, factors, data, mean(data$tau), mean(data$sigma), mean(data$phi), fuse=TRUE)
 			nsL1ret <- with(res.nsL1, list(nsL1.success=success, nsL1.elapsed=elapsed,
 				nsL1.b0=b0, nsL1.b1=b1, nsL1.b0.cov=b0.cov, nsL1.b1.cov=b1.cov, nsL1.b0.clen=b0.clen, nsL1.b1.clen=b1.clen,
-				nsL1.mse.tau=mse.tau, nsL1.mse.sigma=mse.sigma, nsL1.mse.phi=mse.phi, nsL1.c_ll=c_ll, nsL1.mse=mse, nsL1.cov=cov, nsL1.clen=clen, nsL1.lambda=lambda))
+				nsL1.mse.tau=mse.tau, nsL1.mse.sigma=mse.sigma, nsL1.mse.phi=mse.phi, nsL1.frob=frob, nsL1.c_ll=c_ll, nsL1.mse=mse, nsL1.cov=cov, nsL1.clen=clen,
+				nsL1.lambda.tau=lambda.tau, nsL1.lambda.sigma=lambda.sigma, nsL1.lambda.phi=lambda.phi ))
 
 			res.nsL2 <- eval.ns(design, factors, data, mean(data$tau), mean(data$sigma), mean(data$phi), fuse=FALSE)
 			nsL2ret <- with(res.nsL2, list(nsL2.success=success, nsL2.elapsed=elapsed,
 				nsL2.b0=b0, nsL2.b1=b1, nsL2.b0.cov=b0.cov, nsL2.b1.cov=b1.cov, nsL2.b0.clen=b0.clen, nsL2.b1.clen=b1.clen,
-				nsL2.mse.tau=mse.tau, nsL2.mse.sigma=mse.sigma, nsL2.mse.phi=mse.phi, nsL2.c_ll=c_ll, nsL2.mse=mse, nsL2.cov=cov, nsL2.clen=clen, nsL2.lambda=lambda))
+				nsL2.mse.tau=mse.tau, nsL2.mse.sigma=mse.sigma, nsL2.mse.phi=mse.phi, nsL2.frob=frob, nsL2.c_ll=c_ll, nsL2.mse=mse, nsL2.cov=cov, nsL2.clen=clen,
+				nsL2.lambda.tau=lambda.tau, nsL2.lambda.sigma=lambda.sigma, nsL2.lambda.phi=lambda.phi ))
 
 			# ... kernel-convolutions
 			#res.kc <- eval.kc(design, factors, data)
@@ -203,6 +208,7 @@ print(round(unlist(r),3))
 #done
 
 	# split into training and test sets
+
 	#data$which.test <- sample.int(factors$n, floor(factors$n/2))
 	data$which.test <- sample.int(factors$n, factors$nt)
 	data$which.train <- (1:factors$n)[-data$which.test]
@@ -347,6 +353,7 @@ print(round(unlist(r),3))
 	mse.tau   <- NA
 	mse.sigma <- NA
 	mse.phi   <- NA
+	frob  <- NA
 	beta  <- NA
 	tau   <- NA
 	sigma <- NA
@@ -361,6 +368,8 @@ print(round(unlist(r),3))
 		# compute fitted covariance
 		hat.Sigma    <- calc_ns_cov(tau=tau, sigma=sigma, phi=phi, Nr=1, R=rep(1, length=data$n.train), S=design$S[-data$which.test,])
 		hat.invSigma <- chol2inv(chol(hat.Sigma))
+
+		frob <- sqrt( sum((hat.Sigma-data$Sigma[1:data$n.train,1:data$n.train])^2) ) # matrix difference
 
 		bres <- with(data, {
 			A <- Reduce('+', lapply(1:ncol(y.train), function(t) {
@@ -417,7 +426,7 @@ print(round(unlist(r),3))
 	list(
 		success=success, elapsed=as.vector(elapsed[3]),
 		b0=b0, b1=b1, b0.cov=b.cov[1], b1.cov=b.cov[2], b0.clen=b.clen[1], b1.clen=b.clen[2],
-		mse.tau=mse.tau, mse.sigma=mse.sigma, mse.phi=mse.phi,
+		mse.tau=mse.tau, mse.sigma=mse.sigma, mse.phi=mse.phi, frob=frob,
 		c_ll=as.vector(c_ll), mse=as.vector(mse), cov=cov, clen=clen,
 		tau=tau, sigma=sigma, phi=phi
 	)
@@ -431,98 +440,110 @@ print(round(unlist(r),3))
 	init.sigma <- rep(init.sigma, design$Nr)
 	init.phi   <- rep(init.phi, design$Nr)
 
-if (TRUE) {
-	lambdas <- exp( 4:(-4) )
+	# weights to try
+	tw <- c(1000,500,100,25,5,0)
 
-	# identify fixed parameters
-	afixed <- with(data, ns_adapt_fixed(fuse=fuse, lambda=lambdas[1],
-		y=y.train, X=X.train, S=(design$S[-which.test,]),
-		R=(design$gridR$B[-which.test]), Rn=design$gridR$neighbors,
-		B=(design$gridB$B[-which.test]), Bn=design$gridB$neighbors,
-		starts=list(nugget=init.tau, psill=init.sigma, range=init.phi),
-		verbose=TRUE, parallel=FALSE
-	))
-
-if (FALSE) {
-	# adapt weights
-	#lambdas <- c(Inf, exp( 4:(-4) ))
-	#weights <- with(data, ns_adapt_w(fuse=fuse, lambdas=lambdas,
-	weights <- with(data, ns_adapt_fixed(fuse=fuse, lambda=lambdas[1],
-		y=y.train, X=X.train, S=(design$S[-which.test,]),
-		R=(design$gridR$B[-which.test]), Rn=design$gridR$neighbors,
-		B=(design$gridB$B[-which.test]), Bn=design$gridB$neighbors,
-		starts=list(nugget=init.tau, psill=init.sigma, range=init.phi),
-		verbose=TRUE, parallel=TRUE
-	))
-}
-
-} else {
-	weights <- list(nugget=54.59815, psill=0.01831564, range=7.389056)
-}
-#print(weights)
-
-	# which sequence of lambdas do we use to fit?
-	lambdas <- exp( 4:(-4) )
-	Nlambdas <- length(lambdas)
-	err <- rep(NA, Nlambdas)
-	taus <- vector("list", Nlambdas)
-	sigmas <- vector("list", Nlambdas)
-	phis <- vector("list", Nlambdas)
+	err    <- c()
+	taus   <- list()
+	sigmas <- list()
+	phis   <- list()
 
 	# hold out random set for choosing lambda
-	in.h <- sample(1:data$n.train, 100)
+	#cat("Tuning with n =", round(data$n.train*0.10), "holdout observations\n")
+	#in.h <- sample(1:data$n.train, round(data$n.train*0.10))
+cat("n.train=",factors$nt,"\n")
+	in.h <- sample(1:data$n.train, factors$nt)
 	n.h <- length(in.h)
 	n.nh <- data$n.train-n.h
 
-	# find best lambda
-	for (lambda in lambdas) {
-		fit <- NA
-		which.lambda <- which(lambdas==lambda)
+	"do.ns" <- function(lambda, weights, init.tau, init.sigma, init.phi) {
+		fit <- tau <- sigma <- phi <- c_ll <- NA
+print(weights)
 
 		try({
 			# fit for this lambda
 			fit <- with(data, ns_estimate_all(
-				lambda=lambda, y=y.train[-in.h,], X=X.train[-in.h,,], S=(design$S[-which.test,])[-in.h,],
+				lambda=1, weights=weights,
+				#lambda=lambda,
+				y=y.train[-in.h,], X=X.train[-in.h,,], S=(design$S[-which.test,])[-in.h,],
 				R=(design$gridR$B[-which.test])[-in.h], Rn=design$gridR$neighbors,
 				B=(design$gridB$B[-which.test])[-in.h], Bn=design$gridB$neighbors,
-    		#cov.params=list(nugget=list(type="vary"), psill=list(type="vary"), range=list(type="vary")),
-				#inits=list(nugget=init.tau, psill=init.sigma, range=init.phi),
-    		cov.params=afixed$cov.params, inits=afixed$inits,
-				verbose=TRUE, parallel=FALSE, fuse=fuse, all=FALSE #, weights=unlist(weights)
+	   		cov.params=list(nugget=list(type="vary"), psill=list(type="vary"), range=list(type="vary")),
+				inits=list(nugget=init.tau, psill=init.sigma, range=init.phi),
+	   		#cov.params=afixed$cov.params, inits=afixed$inits,
+				verbose=TRUE, parallel=FALSE, fuse=fuse, all=FALSE
 			) )
 
 			if (fit$conv == 1) {
-				init.tau   <- fit$tau
-				init.sigma <- fit$sigma
-				init.phi   <- fit$phi
-				taus[[which.lambda]] <- fit$tau
-				sigmas[[which.lambda]] <- fit$sigma
-				phis[[which.lambda]] <- fit$phi
+				tau   <- fit$tau
+				sigma <- fit$sigma
+				phi   <- fit$phi
 
 				# evaluate conditional log-likelihood on holdout set
 				c_ll <- with(data, ns_cond_ll(X.train[-in.h,,], X.train[in.h,,], y.train[-in.h,], y.train[in.h,],
 				                   fit$beta, fit$tau, fit$sigma, fit$phi,
 				                   (design$S[-which.test,])[-in.h,], (design$S[-which.test,])[in.h,],
 				                   (design$gridR$B[-which.test])[-in.h], (design$gridR$B[-which.test])[in.h]) )
-
-	      err[which.lambda] <- c_ll
 			}
     })
 
-		if (is.na(fit) || fit$conv == 0) {
-			# let's stop here
-			break;
-		}
+		list(fit=fit, tau=tau, sigma=sigma, phi=phi, c_ll=c_ll)
+	}
 
-		if (which.lambda > 2) {
-			if (err[which.lambda] < err[which.lambda-1] & err[which.lambda-1] < err[which.lambda-2]) {
-				# no improvement over last two steps, so let's stop early
-				break;
+	bw <- cw <- rep(1, 3)  # get starting weights (bw=best, cw=current; uses indices into try weights, tw)
+
+	# get initial results
+	res <- do.ns(1, tw[bw], init.tau, init.sigma, init.phi)
+	if (!is.na(res$fit) && res$fit$conv == 1) {
+		best.c_ll <- res$c_ll
+		init.phi <- res$phi; init.sigma <- res$sigma; init.tau <- res$tau
+	} else {
+		best.c_ll <- NA
+	}
+print(best.c_ll)
+
+	if (!is.na(best.c_ll)) {
+		# find best lambda
+		while (1) {
+			local.c_ll <- -Inf
+			local.i    <- 0
+			local.res  <- NA
+
+			for (i in 1:3) {
+				ichange <- bw[i]+1
+				if (ichange > length(tw)) break;  # we are done
+
+				cw <- bw
+				cw[i] <- ichange
+
+				res <- do.ns(1, tw[cw], init.tau, init.sigma, init.phi)
+				if (!is.na(res$fit) && res$fit$conv == 1) {
+print(res$c_ll)
+					if (res$c_ll > local.c_ll) {
+						local.c_ll <- res$c_ll
+						local.i    <- i
+						local.res  <- res
+					}
+				}
+		  }
+
+			if (local.c_ll > best.c_ll) {
+				best.c_ll   <- local.c_ll     # save best
+				bw[local.i] <- bw[local.i]+1  # update index of "best"
+				init.phi <- local.res$phi; init.sigma <- local.res$sigma; init.tau <- local.res$tau
+			} else {
+				break
 			}
+print(best.c_ll)
 		}
-  }
+	}
 
-	lambda.best <- NA
+print(bw)
+print(best.c_ll)
+
+	lambda.tau   <- tw[bw[1]]
+	lambda.sigma <- tw[bw[2]]
+	lambda.phi   <- tw[bw[3]]
 	success <- FALSE
 
 	b0    <- NA
@@ -535,31 +556,27 @@ if (FALSE) {
 	mse.tau   <- NA
 	mse.sigma <- NA
 	mse.phi   <- NA
+	frob  <- NA
 	beta  <- NA
 	tau   <- NA
 	sigma <- NA
 	phi   <- NA
 
 	# did we find a good lambda?
-	if (sum(!is.na(err)) > 0) {
+	if (!is.na(best.c_ll)) {
 		# yes!
-		which.best <- which.max(err)
-		lambda.best <- lambdas[which.best]
-		init.tau <- taus[[which.best]]
-		init.sigma <- sigmas[[which.best]]
-		init.phi <- phis[[which.best]]
-#print(lambda.best)
-#print(init.phi)
 
 		# fit model to all training data
 		try({
 			fit <- with(data, ns_estimate_all(
-				lambda=lambda.best, y=y.train, X=X.train, S=design$S[-which.test,],
+				lambda=1, weights=tw[bw],
+				#lambda=lambda.best,
+				y=y.train, X=X.train, S=design$S[-which.test,],
 				R=design$gridR$B[-which.test], Rn=design$gridR$neighbors,
 				B=design$gridB$B[-which.test], Bn=design$gridB$neighbors,
-    		#cov.params=list(nugget=list(type="vary"), psill=list(type="vary"), range=list(type="vary")),
-				#inits=list(nugget=init.tau, psill=init.sigma, range=init.phi),
-    		cov.params=afixed$cov.params, inits=afixed$inits,
+    		cov.params=list(nugget=list(type="vary"), psill=list(type="vary"), range=list(type="vary")),
+				inits=list(nugget=init.tau, psill=init.sigma, range=init.phi),
+    		#cov.params=afixed$cov.params, inits=afixed$inits,
 				verbose=TRUE, parallel=FALSE, fuse=fuse
 			) )
 		})
@@ -580,6 +597,8 @@ if (FALSE) {
 		# compute fitted covariance
 		hat.Sigma    <- calc_ns_cov(tau=tau, sigma=sigma, phi=phi, Nr=design$Nr, R=design$gridR$B[-data$which.test], S=design$S[-data$which.test,])
 		hat.invSigma <- chol2inv(chol(hat.Sigma))
+
+		frob <- sqrt( sum((hat.Sigma-data$Sigma[1:data$n.train,1:data$n.train])^2) ) # matrix difference
 
 		bres <- with(data, {
 			A <- Reduce('+', lapply(1:ncol(y.train), function(t) {
@@ -638,9 +657,10 @@ if (FALSE) {
 	list(
 		success=success, elapsed=as.vector(elapsed[3]),
 		b0=b0, b1=b1, b0.cov=b.cov[1], b1.cov=b.cov[2], b0.clen=b.clen[1], b1.clen=b.clen[2],
-		mse.tau=mse.tau, mse.sigma=mse.sigma, mse.phi=mse.phi,
+		mse.tau=mse.tau, mse.sigma=mse.sigma, mse.phi=mse.phi, frob=frob,
 		c_ll=as.vector(c_ll), mse=as.vector(mse), cov=cov, clen=clen,
-		lambda=log(lambda.best), tau=tau, sigma=sigma, phi=phi
+		lambda.tau=lambda.tau, lambda.sigma=lambda.sigma, lambda.phi=lambda.phi,
+		tau=tau, sigma=sigma, phi=phi
 	)
 }
 
@@ -673,13 +693,15 @@ sim.factors <- expand.grid(
 	Nreps=10,
 	#Nreps=50,
 	# amount of data to generate
-	#n=23^2, nt=100
+	#n=23^2, nt=100  # QUICK
 	#n=39^2, nt=500
-	n=40^2, nt=600
+	#n=40^2, nt=600
 	#n=50^2, nt=500
+
+	n=55^2, nt=500  # STUDY
 )
 
-if (TRUE) {
+if (FALSE) {
 	options(cores=4)
 	options(mc.cores=4)
 

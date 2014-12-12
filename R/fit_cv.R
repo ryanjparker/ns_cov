@@ -6,6 +6,40 @@ source("R/create_blocks.R")
 source("R/ns_cov.R")
 source("R/ns_estimate.R")
 
+"ns_hold" <- function(x,
+	y, X, S, R, Rn, B, Bn,
+	cov.params, inits,
+	in.h,
+	verbose=TRUE, parallel=FALSE, fuse=FALSE, all=FALSE, gpu=FALSE
+) {
+	if (sum(x >= Inf | x <= -Inf) > 0) return(Inf)
+	weights <- exp(x)
+print(c(x,weights))
+
+	c_ll <- -Inf
+	try({
+		# fit for this lambda
+		fit <- ns_estimate_all(lambda=1, weights=weights,
+			y=y[-in.h,], X=X[-in.h,,], S=S[-in.h,],
+			R=R[-in.h], Rn=Rn, B=B[-in.h], Bn=Bn,
+			cov.params=cov.params, inits=inits,
+			verbose=verbose, parallel=parallel, fuse=fuse, all=all
+		)
+
+		if (fit$conv == 1) {
+			# evaluate conditional log-likelihood on holdout set
+			c_ll <- ns_cond_ll(X[-in.h,,], X[in.h,,], y[-in.h,], y[in.h,],
+				fit$beta, fit$tau, fit$sigma, fit$phi,
+				S[-in.h,], S[in.h,],
+				R[-in.h], R[in.h])
+		}
+	})
+
+print(-c_ll)
+
+	-c_ll
+}
+
 "ns_cv" <- function(type, lambda, y, S, X, Nfolds, starts, cov.params, gridR, gridB, verbose=TRUE, all=FALSE, parallel=FALSE, gpu=FALSE) {
 	# type: 0=stationary, 1=L1 penalty, 2=L2 penalty
 	n <- dim(y)[1]
