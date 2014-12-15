@@ -135,7 +135,7 @@ print(round(unlist(r),3))
 		#data$sigma <- sqrt(c(.95,1.90,1.90,2.85))
 		#data$sigma <- sqrt(c(0.95,1.95,1.95,2.95))
 		#data$phi   <- 0.05
-		data$tau   <- rep(0.05,4)
+		data$tau   <- rep(0.10,4)
 		data$sigma <- sqrt( 0.5*scale )
 		data$phi   <- rep(0.05,4)
 		Sigma <- calc_ns_cov(tau=data$tau, sigma=data$sigma, phi=data$phi, Nr=design$d_Nr, R=design$d_gridR$B, S=design$S, D2=design$D2)
@@ -441,7 +441,7 @@ print(round(unlist(r),3))
 	init.phi   <- rep(init.phi, design$Nr)
 
 	# weights to try
-	tw <- c(1000,500,100,25,5,0)
+	tw <- c(Inf,250,100,25,5,0)
 
 	err    <- c()
 	taus   <- list()
@@ -701,7 +701,7 @@ sim.factors <- expand.grid(
 	n=55^2, nt=500  # STUDY
 )
 
-if (FALSE) {
+if (TRUE) {
 	options(cores=4)
 	options(mc.cores=4)
 

@@ -86,6 +86,12 @@ library(parallel)
 		if (!is.null(cov.params$range)  & cov.params$range$type=="fixed" ) { isFixed$range  <- TRUE; phi   <- cov.params$range$value  }
 	}
 
+	if (!missing(weights)) {
+		if (weights[1] == Inf && !isFixed$nugget) Ntau   <- 1
+		if (weights[2] == Inf && !isFixed$psill)  Nsigma <- 1
+		if (weights[3] == Inf && !isFixed$range)  Nphi   <- 1
+	}
+
 	R.tau   <- R
 	R.sigma <- R
 	R.phi   <- R
@@ -130,13 +136,25 @@ library(parallel)
 		}
 	}
 
+	if (length(tau)   != Ntau  ) {
+		if (length(tau) == 1) tau <- rep(tau, Ntau)
+		else if (Ntau == 1)   tau <- mean(tau)
+		else                  stop(paste0("Error with tau init. Found ",length(tau),"; expected ",Ntau,"\n"))
+	}
+	if (length(sigma) != Nsigma) {
+		if (length(sigma) == 1) sigma <- rep(sigma, Nsigma)
+		else if (Nsigma == 1)   sigma <- mean(sigma)
+		else                    stop(paste0("Error with sigma init. Found ",length(sigma),"; expected ",Nsigma,"\n"))
+	}
+	if (length(phi)   != Nphi  ) {
+		if (length(phi) == 1) phi <- rep(phi, Nphi)
+		else if (Nphi == 1)   phi <- mean(phi)
+		else                  stop(paste0("Error with phi init. Found ",length(phi),"; expected ",Nphi,"\n"))
+	}
+
 	ltau   <- log(tau)
 	lsigma <- log(sigma)
 	lphi   <- log(phi)
-
-	if (length(tau)   != Ntau  ) stop(paste0("Error with tau init. Found ",length(tau),"; expected ",Ntau,"\n"))
-	if (length(sigma) != Nsigma) stop(paste0("Error with sigma init. Found ",length(sigma),"; expected ",Nsigma,"\n"))
-	if (length(phi)   != Nphi  ) stop(paste0("Error with phi init. Found ",length(phi),"; expected ",Nphi,"\n"))
 
 	if (missing(weights)) weights <- rep(1, 3)
 	rwids <- list(tau=1, sigma=2, phi=3)  # weight IDs; use rwids["tau"], etc.
