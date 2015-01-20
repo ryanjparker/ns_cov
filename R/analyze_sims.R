@@ -3,12 +3,12 @@
 b0 <- 0
 b1 <- 1
 
-for (i in 2:2) {
+for (i in 3:3) {
 	Nparts <- 20
 	if (Nparts > 1) {
 		cer <- data.frame()
 		for (part in 1:Nparts) {
-		#for (part in (1:Nparts)[-c(10)]) {
+		#for (part in (1:Nparts)[-c(9,20)]) {
 			load(paste0("output/exp_",i,"_",part,".RData"))
 			cer <- rbind(cer, exp_res)
 		}
@@ -73,10 +73,10 @@ for (i in 2:2) {
 
 	cat("==============\n")
 	cat("rmse b1:\n")
-	with(gres, cat("O = ",round(sqrt(mean((o.b1-b1)^2)),2),"\n",sep=""))
-	with(gres, cat("S = ",round(sqrt(mean((s.b1-b1)^2)),2),", ",round(sqrt(mean((s.b1-b1)^2)/mean((o.b1-b1)^2)),2),"\n",sep=""))
-	with(gres, cat("NS L1 = ",round(sqrt(mean((nsL1.b1-b1)^2)),2),", ",round(sqrt(mean((nsL1.b1-b1)^2)/mean((o.b1-b1)^2)),2),"\n",sep=""))
-	with(gres, cat("NS L2 = ",round(sqrt(mean((nsL2.b1-b1)^2)),2),", ",round(sqrt(mean((nsL2.b1-b1)^2)/mean((o.b1-b1)^2)),2),"\n",sep=""))
+	with(gres, cat("O = ",round(sqrt(mean((o.b1-b1)^2)),3),"\n",sep=""))
+	with(gres, cat("S = ",round(sqrt(mean((s.b1-b1)^2)),3),", ",round(sqrt(mean((s.b1-b1)^2)/mean((o.b1-b1)^2)),2),"\n",sep=""))
+	with(gres, cat("NS L1 = ",round(sqrt(mean((nsL1.b1-b1)^2)),3),", ",round(sqrt(mean((nsL1.b1-b1)^2)/mean((o.b1-b1)^2)),2),"\n",sep=""))
+	with(gres, cat("NS L2 = ",round(sqrt(mean((nsL2.b1-b1)^2)),3),", ",round(sqrt(mean((nsL2.b1-b1)^2)/mean((o.b1-b1)^2)),2),"\n",sep=""))
 
 	cat("==============\n")
 	cat("cov b0:\n")
