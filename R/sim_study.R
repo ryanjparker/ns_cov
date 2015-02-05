@@ -622,13 +622,61 @@ print(best.c_ll)
 #print(round(b.lo,4))
 
 		if (length(data$tau) == 1 || length(tau) == 1) mse.tau <- mean( (tau-data$tau)^2 )
-		else mse.tau   <- mean( (tau-data$tau[c(1,1,2,2,1,1,2,2,3,3,4,4,3,3,4,4)])^2 )
+		else {
+			if (Nr == 4^2) {
+				mse.tau   <- mean( (tau-data$tau[c(1,1,2,2,1,1,2,2,3,3,4,4,3,3,4,4)])^2 )
+			} else if (Nr == 5^2) {
+				mse.tau   <- mean(
+					(
+						c(
+							(tau[1]-data$tau[1]), (tau[2]-data$tau[1]), (tau[3]-0.5*(data$tau[1]+data$tau[2])), (tau[4]-data$tau[2]), (tau[5]-data$tau[2]),
+							(tau[6]-data$tau[1]), (tau[7]-data$tau[1]), (tau[8]-0.5*(data$tau[1]+data$tau[2])), (tau[9]-data$tau[2]), (tau[10]-data$tau[2]),
+							(tau[11]-0.5*(data$tau[1]+data$tau[3])), (tau[12]-0.5*(data$tau[1]+data$tau[3])), (tau[13]-0.25*sum(data$tau)), (tau[14]-0.5*(data$tau[2]+data$tau[4])), (tau[15]-0.5*(data$tau[2]+data$tau[4])),
+							(tau[16]-data$tau[3]), (tau[17]-data$tau[3]), (tau[18]-0.5*(data$tau[3]+data$tau[4])), (tau[19]-data$tau[4]), (tau[20]-data$tau[4]),
+							(tau[21]-data$tau[3]), (tau[22]-data$tau[3]), (tau[23]-0.5*(data$tau[3]+data$tau[4])), (tau[24]-data$tau[4]), (tau[25]-data$tau[4])
+						)
+					)^2
+				)
+			}
+		}
 
 		if (length(data$sigma) == 1 || length(sigma) == 1) mse.sigma   <- mean( (sigma-data$sigma)^2 )
-		else mse.sigma   <- mean( (sigma-data$sigma[c(1,1,2,2,1,1,2,2,3,3,4,4,3,3,4,4)])^2 )
+		else {
+			if (Nr == 4^2) {
+				mse.sigma   <- mean( (sigma-data$sigma[c(1,1,2,2,1,1,2,2,3,3,4,4,3,3,4,4)])^2 )
+			} else if (Nr == 5^2) {
+				mse.sigma   <- mean(
+					(
+						c(
+							(sigma[1]-data$sigma[1]), (sigma[2]-data$sigma[1]), (sigma[3]-0.5*(data$sigma[1]+data$sigma[2])), (sigma[4]-data$sigma[2]), (sigma[5]-data$sigma[2]),
+							(sigma[6]-data$sigma[1]), (sigma[7]-data$sigma[1]), (sigma[8]-0.5*(data$sigma[1]+data$sigma[2])), (sigma[9]-data$sigma[2]), (sigma[10]-data$sigma[2]),
+							(sigma[11]-0.5*(data$sigma[1]+data$sigma[3])), (sigma[12]-0.5*(data$sigma[1]+data$sigma[3])), (sigma[13]-0.25*sum(data$sigma)), (sigma[14]-0.5*(data$sigma[2]+data$sigma[4])), (sigma[15]-0.5*(data$sigma[2]+data$sigma[4])),
+							(sigma[16]-data$sigma[3]), (sigma[17]-data$sigma[3]), (sigma[18]-0.5*(data$sigma[3]+data$sigma[4])), (sigma[19]-data$sigma[4]), (sigma[20]-data$sigma[4]),
+							(sigma[21]-data$sigma[3]), (sigma[22]-data$sigma[3]), (sigma[23]-0.5*(data$sigma[3]+data$sigma[4])), (sigma[24]-data$sigma[4]), (sigma[25]-data$sigma[4])
+						)
+					)^2
+				)
+			}
+		}
 
 		if (length(data$phi) == 1 || length(phi) == 1) mse.phi   <- mean( (phi-data$phi)^2 )
-		else mse.phi   <- mean( (phi-data$phi[c(1,1,2,2,1,1,2,2,3,3,4,4,3,3,4,4)])^2 )
+		else {
+			if (Nr == 4^2) {
+				mse.phi   <- mean( (phi-data$phi[c(1,1,2,2,1,1,2,2,3,3,4,4,3,3,4,4)])^2 )
+			} else if (Nr == 5^2) {
+				mse.phi   <- mean(
+					(
+						c(
+							(phi[1]-data$phi[1]), (phi[2]-data$phi[1]), (phi[3]-0.5*(data$phi[1]+data$phi[2])), (phi[4]-data$phi[2]), (phi[5]-data$phi[2]),
+							(phi[6]-data$phi[1]), (phi[7]-data$phi[1]), (phi[8]-0.5*(data$phi[1]+data$phi[2])), (phi[9]-data$phi[2]), (phi[10]-data$phi[2]),
+							(phi[11]-0.5*(data$phi[1]+data$phi[3])), (phi[12]-0.5*(data$phi[1]+data$phi[3])), (phi[13]-0.25*sum(data$phi)), (phi[14]-0.5*(data$phi[2]+data$phi[4])), (phi[15]-0.5*(data$phi[2]+data$phi[4])),
+							(phi[16]-data$phi[3]), (phi[17]-data$phi[3]), (phi[18]-0.5*(data$phi[3]+data$phi[4])), (phi[19]-data$phi[4]), (phi[20]-data$phi[4]),
+							(phi[21]-data$phi[3]), (phi[22]-data$phi[3]), (phi[23]-0.5*(data$phi[3]+data$phi[4])), (phi[24]-data$phi[4]), (phi[25]-data$phi[4])
+						)
+					)^2
+				)
+			}
+		}
 
 		# conditional log-likelihood
 		c_ll <- with(data, ns_cond_ll(X.train, X.test, y.train, y.test, beta=fit$beta, tau=fit$tau, sigma=fit$sigma, phi=fit$phi,
@@ -676,7 +724,7 @@ sim.design <- list(
 	# actual number of regions for varying parameter
 	d_Nr=2^2,
 	# number of regions in NS model
-	Nr=4^2,
+	Nr=5^2,
 	# number of obs per block in BCL
 	Nb=50,
 	# coefficients
