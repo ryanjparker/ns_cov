@@ -10,15 +10,20 @@ keep <- which( rowSums(apply(Y, 2, is.na))==0 )
 n <- length(keep)
 
 # data for NS model
-X <- array(1, dim=c(n, ncol(Y), 1))
+X <- array(1, dim=c(n, ncol(Y), 2))
 X[,,1] <- 1
-#X[,,2] <- CMAQ[index,][keep,]
+X[,,2] <- CMAQ[index,][keep,]
 
 dat.ns <- list(
 	#y=matrix( fit.slr$residuals, nrow=length(keep), ncol=ncol(Y) ),
 	y=Y[keep,], X=X,
 	S=cbind(x[s[keep,1]], y[s[keep,2]])
 )
+
+y.mu <- with(dat.ns, mean(y))
+y.sd <- with(dat.ns, sd(y))
+S.max <- with(dat.ns, max(S))
+S.min <- with(dat.ns, min(S))
 
 # scale data
 dat.ns$y <- with(dat.ns, (y-mean(y))/sd(y) )
@@ -81,18 +86,18 @@ keep <- which( rowSums(apply(Y, 2, is.na))==0 )
 n <- length(keep)
 
 if (FALSE) {
-# start by fitting SLR
-dat.slr <- list(
-	y=as.vector(Y[keep,]),
-	cmaq=as.vector(CMAQ[index,][keep,])
-)
-fit.slr <- lm(y~cmaq, data=dat.slr)
+	# start by fitting SLR
+	dat.slr <- list(
+		y=as.vector(Y[keep,]),
+		cmaq=as.vector(CMAQ[index,][keep,])
+	)
+	fit.slr <- lm(y~cmaq, data=dat.slr)
 }
 
 # data for NS model
-X <- array(1, dim=c(n, ncol(Y), 1))
+X <- array(1, dim=c(n, ncol(Y), 2))
 X[,,1] <- 1
-#X[,,2] <- CMAQ[index,][keep,]
+X[,,2] <- CMAQ[index,][keep,]
 
 dat.ns <- list(
 	#y=matrix( fit.slr$residuals, nrow=length(keep), ncol=ncol(Y) ),
@@ -143,9 +148,7 @@ if (FALSE) {
 	kn <- v.fit[1,"psill"]
 	ks <- v.fit[2,"psill"]
 	kr <- v.fit[2,"range"]
-}
 
-if (FALSE) {
 	# fit stationary model
 	#fit.s <- ns_estimate_range(lambda=0,y=y,S=S,R=rep(1,n),Rn=gridR$neighbors,B=gridB$B,Bn=gridB$neighbors,verbose=TRUE,init.phi=v.fit[2,"range"])
 	fit.s <- with(dat.ns,
@@ -160,8 +163,34 @@ if (FALSE) {
 done
 }
 
+done
 if (FALSE) {
-	# fit range varying model
+	# find lambda
+	source("R/find_lambda.R")
+
+set.seed(1983)
+	res.L1 <- with(dat.ns, ns.find_lambda(y[,1:31], X=X, S=S, gridR=gridR, gridB=gridB,
+		inits=list( tau=rep(fit.s$tau,Nr), sigma=rep(fit.s$tau,Nr), psill=rep(fit.s$tau,Nr) ),
+		#tw=c(Inf,250,100,25,5,0),
+		tw=c(Inf,250,100,25,5,0),
+		Nhold=70, fuse=TRUE, parallel=TRUE)
+	)
+print(res.L1)
+
+set.seed(1983)
+	res.L2 <- with(dat.ns, ns.find_lambda(y[,1:31], X=X, S=S, gridR=gridR, gridB=gridB,
+		inits=list( tau=rep(fit.s$tau,Nr), sigma=rep(fit.s$tau,Nr), psill=rep(fit.s$tau,Nr) ),
+		tw=c(Inf,250,100,25,5,0),
+		#tw=c(Inf,100,25,5,0),
+		Nhold=70, fuse=FALSE, parallel=TRUE)
+	)
+print(res.L2)
+
+done
+}
+
+if (FALSE) {
+	# fit varying model
 	lambda <- exp(3)
 	#starts <- list(nugget=fit.s$tau, psill=fit.s$sigma, range=rep(fit.s$phi,Nr))
 	starts <- list(nugget=rep(fit.s$tau,Nr), psill=rep(fit.s$sigma,Nr), range=rep(fit.s$phi,Nr))

@@ -57,6 +57,7 @@ library(parallel)
 	if (!missing(X)) {
 		hasX <- TRUE
 		#X <- as.matrix(X)
+print(dim(X))
 		p <- dim(X)[3]
 		seq.p <- 1:p
 		seq.p2 <- 1:(p^2)

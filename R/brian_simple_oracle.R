@@ -6,9 +6,9 @@ source("R/ns_cov.R")
 
 # setup observation locations
 
- Ngrid <- 80
+ Ngrid <- 10
  n     <- Ngrid^2
- hn    <- 600
+ hn    <- 10
  S     <- seq(0,1,length=Ngrid)
 cat("Grid\n")
  S     <- as.matrix(expand.grid(S,S))
@@ -26,7 +26,7 @@ cat("--> Done\n")
 
 # Set the true values
 
- sim   <- 4
+ sim   <- 3
  scale <- c(1,5,5,10)
  if(sim==1){
   tau   <- 0.25*scale
@@ -62,21 +62,25 @@ cat("--> Done\n")
 
 # Data
 
- y  <- gpuMM(t(gpuChol(Sigma)), matrix(rnorm(n),ncol=1))
+ #y  <- gpuMM(t(gpuChol(Sigma)), matrix(rnorm(n),ncol=1))
+ y  <- 3 + S[,1]*0.1 + t(chol(Sigma)) %*% rnorm(n)
  y  <- as.vector(y)
  y1 <- y[!hold]
  y2 <- y[hold]
 
 # Predict holdout data
 
- S1      <- gpuMM(Sigma[hold,!hold], gpuChol2Inv(Sigma1))
+ #S1      <- gpuMM(Sigma[hold,!hold], gpuChol2Inv(Sigma1))
+ S1      <- Sigma[hold,!hold] %*% chol2inv(chol(Sigma1))
  y2_true <- S1 %*% y1
- se_true <- Sigma2-gpuMM(S1, Sigma[!hold,hold])
+ #se_true <- Sigma2-gpuMM(S1, Sigma[!hold,hold])
+ se_true <- Sigma2-S1 %*% Sigma[!hold,hold]
  se_true <- sqrt(diag(se_true))
 
- S1      <- gpuMM(hSigma[hold,!hold], gpuChol2Inv(hSigma1))
+ S1      <- hSigma[hold,!hold] %*% chol2inv(chol(hSigma1))
  y2_app  <- S1 %*% y1
- se_app  <- hSigma2-gpuMM(S1, hSigma[!hold,hold])
+ #se_app  <- hSigma2-gpuMM(S1, hSigma[!hold,hold])
+ se_app  <- hSigma2-S1 %*% hSigma[!hold,hold]
  se_app  <- sqrt(diag(se_app))
 
 # Plot the fits
@@ -122,5 +126,6 @@ if (plot) {
 }
 
 set.seed(1983)
-res <- lapply(1:500, function(i) { r <- get_vals(); print(r$mse[3]); r })
+res <- lapply(1:500, function(i) { r <- get_vals(); r })
 #print(res)
+print( summary( unlist(lapply(res, function(x) { x$mse[3] })) ) )
