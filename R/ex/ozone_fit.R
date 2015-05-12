@@ -33,9 +33,24 @@ source("R/ex/ozone_data.R")
 	fit.s
 }
 
+# evaluate models
+gridS <- list(B=rep(1,length(gridR$B)))
+if (TRUE & exists("fit.s.CMAQ")) eval.S_CMAQ  <- ns.eval_res(res=list(fit=fit.s.CMAQ,in.h=res.L1.CMAQ$in.h), dat=dat.CMAQ, gridR=gridS, gridB=gridS, fuse=TRUE, parallel=TRUE)
+if (TRUE & exists("fit.s.poly")) eval.S_poly  <- ns.eval_res(res=list(fit=fit.s.poly,in.h=res.L1.poly$in.h), dat=dat.poly, gridR=gridS, gridB=gridS, fuse=TRUE, parallel=TRUE)
+
+if (TRUE & exists("res.L1.CMAQ")) eval.L1_CMAQ <- ns.eval_res(res=res.L1.CMAQ, dat=dat.CMAQ, gridR=gridR, gridB=gridB, fuse=TRUE, parallel=TRUE)
+if (TRUE & exists("res.L2.CMAQ")) eval.L2_CMAQ <- ns.eval_res(res=res.L2.CMAQ, dat=dat.CMAQ, gridR=gridR, gridB=gridB, fuse=TRUE, parallel=TRUE)
+if (TRUE & exists("res.L1.poly")) eval.L1_poly <- ns.eval_res(res=res.L1.poly, dat=dat.poly, gridR=gridR, gridB=gridB, fuse=TRUE, parallel=TRUE)
+if (TRUE & exists("res.L2.poly")) eval.L2_poly <- ns.eval_res(res=res.L2.poly, dat=dat.poly, gridR=gridR, gridB=gridB, fuse=TRUE, parallel=TRUE)
+
+done
+
 # with CMAQ
-if (TRUE) {
-	if (!exists("fit.s.CMAQ")) fit.s.CMAQ <- fit_stationary(dat.CMAQ)
+if (FALSE) {
+	if (!exists("fit.s.CMAQ")) {
+		fit.s.CMAQ <- fit_stationary(dat.CMAQ)
+		save(fit.s.CMAQ, file="output/S_CMAQ.RData")
+	}
 
 set.seed(1983)
 	res.L1.CMAQ <- with(dat.CMAQ, ns.find_lambda(y[,1:31], X=X, S=S, gridR=gridR, gridB=gridB,
@@ -61,7 +76,10 @@ print(res.L2.CMAQ)
 
 # polynomial
 if (FALSE) {
-	if (!exists("fit.s.poly")) fit.s.poly <- fit_stationary(dat.poly)
+	if (!exists("fit.s.poly")) {
+		fit.s.poly <- fit_stationary(dat.poly)
+		save(fit.s.poly, file="output/S_poly.RData")
+	}
 
 set.seed(1983)
 	res.L1.poly <- with(dat.poly, ns.find_lambda(y[,1:31], X=X, S=S, gridR=gridR, gridB=gridB,

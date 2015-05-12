@@ -70,14 +70,19 @@ library(deldir)
 }
 
 # create blocks by clustering locations
-"blocks.cluster" <- function(S, nblocks, queen=TRUE) {
+"blocks.cluster" <- function(S, nblocks, queen=TRUE, bpoly) {
 	km <- kmeans(S, centers=S[round(seq(1,nrow(S),length=nblocks)),])
 
 	# create polygons from clustering
 	#r.x <- c(floor(min(S[,1])),ceiling(max(S[,1])))
 	#r.y <- c(floor(min(S[,2])),ceiling(max(S[,2])))
-	r.x <- c(min(S[,1])-0.01,max(S[,1])+0.01)
-	r.y <- c(min(S[,2])-0.01,max(S[,2])+0.01)
+	if (missing(bpoly)) {
+		r.x <- c(min(S[,1])-0.01,max(S[,1])+0.01)
+		r.y <- c(min(S[,2])-0.01,max(S[,2])+0.01)
+	} else {
+		r.x <- c(extent(bpoly)[1],extent(bpoly)[2])
+		r.y <- c(extent(bpoly)[3],extent(bpoly)[4])
+	}
 
 	scale <- 100 #max(100,nblocks)
 	sp  <- expand.grid(seq(r.x[1],r.x[2],length=scale), seq(r.y[1],r.y[2],length=scale))
