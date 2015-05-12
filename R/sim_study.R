@@ -623,9 +623,9 @@ print(best.c_ll)
 
 		if (length(data$tau) == 1 || length(tau) == 1) mse.tau <- mean( (tau-data$tau)^2 )
 		else {
-			if (Nr == 4^2) {
+			if (design$Nr == 4^2) {
 				mse.tau   <- mean( (tau-data$tau[c(1,1,2,2,1,1,2,2,3,3,4,4,3,3,4,4)])^2 )
-			} else if (Nr == 5^2) {
+			} else if (design$Nr == 5^2) {
 				mse.tau   <- mean(
 					(
 						c(
@@ -642,9 +642,9 @@ print(best.c_ll)
 
 		if (length(data$sigma) == 1 || length(sigma) == 1) mse.sigma   <- mean( (sigma-data$sigma)^2 )
 		else {
-			if (Nr == 4^2) {
+			if (design$Nr == 4^2) {
 				mse.sigma   <- mean( (sigma-data$sigma[c(1,1,2,2,1,1,2,2,3,3,4,4,3,3,4,4)])^2 )
-			} else if (Nr == 5^2) {
+			} else if (design$Nr == 5^2) {
 				mse.sigma   <- mean(
 					(
 						c(
@@ -661,9 +661,9 @@ print(best.c_ll)
 
 		if (length(data$phi) == 1 || length(phi) == 1) mse.phi   <- mean( (phi-data$phi)^2 )
 		else {
-			if (Nr == 4^2) {
+			if (design$Nr == 4^2) {
 				mse.phi   <- mean( (phi-data$phi[c(1,1,2,2,1,1,2,2,3,3,4,4,3,3,4,4)])^2 )
-			} else if (Nr == 5^2) {
+			} else if (design$Nr == 5^2) {
 				mse.phi   <- mean(
 					(
 						c(
