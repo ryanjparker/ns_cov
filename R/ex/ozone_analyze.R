@@ -371,7 +371,7 @@ if (FALSE) {
 		gridded(pdat) = ~x+y
 		image(pdat["pred"], col=cols, zlim=zlim)
 		plot(CA_poly_sp.lcc,xaxt="n",yaxt="n",ann=FALSE,add=TRUE)
-		title(main="S/L1 Ratio", line=0)
+		title(main="S/L2 Ratio", line=0)
 
 		# legend
 		par(fig=c(0.90,1.00,0,1), new=TRUE )
