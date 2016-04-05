@@ -1,4 +1,7 @@
 # find lambda sequence for non-stationary model
+library(rgeos)
+library(fields)
+library(prevR)
 
 source("R/ns_cov.R")
 source("R/ns_estimate.R")
@@ -158,7 +161,7 @@ print(best.c_ll)
 		diffs2 <- sapply(1:ncol(y), function(i) { (preds$y[,i]-y.h[,i])^2 })
 		mse <- mean(diffs2)
 
-		list(c_ll=c_ll, mse=mse, sd=mean(preds$sd))
+		list(c_ll=c_ll, mse=mse, sd=mean(preds$sd), se_mse=sd(diffs2)/sqrt(length(diffs2)), d2=diffs2)
 	}
 
 	res.all <- do.eval(X[-in.h,,], y[-in.h,], S[-in.h,], gridR$B[-in.h], X[in.h,,], y[in.h,], S[in.h,], gridR$B[in.h])

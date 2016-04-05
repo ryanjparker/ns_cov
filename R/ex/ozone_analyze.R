@@ -412,7 +412,7 @@ done
 
 }
 
-if (TRUE) {
+if (FALSE) {
 	# make plots
 	library(maps)
 
