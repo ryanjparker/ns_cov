@@ -3,13 +3,13 @@
 b0 <- 0
 b1 <- 1
 
-for (i in 2:2) {
+for (i in 1:1) {
 	Nparts <- 20
 	if (Nparts > 1) {
 		cer <- data.frame()
 		for (part in 1:Nparts) {
 		#for (part in (1:Nparts)[-c(9,20)]) {
-			load(paste0("output/exp_",i,"_",part,".RData"))
+			load(paste0("output/4x4/exp_",i,"_",part,".RData"))
 			cer <- rbind(cer, exp_res)
 		}
 		exp_res <- cer
@@ -54,15 +54,18 @@ for (i in 2:2) {
 	cat("O = ",with(gres_sum, round(o.c_ll-o.c_ll,2)),"\n",sep="")
 	cat("S = ",with(gres_sum, round(o.c_ll-s.c_ll,2)),", (",with(c_ll$s, (conf.int[1] - estimate)/(qt(.05/2, df=parameter))),")\n",sep="")
 	cat("NS L1 = ",with(gres_sum, round(o.c_ll-nsL1.c_ll,2)),", (",with(c_ll$nsL1, (conf.int[1] - estimate)/(qt(.05/2, df=parameter))),")\n",sep="")
+	with(gres, print(t.test(nsL1.c_ll,s.c_ll,paired=T)$p.value < 0.05))
 	cat("NS L2 = ",with(gres_sum, round(o.c_ll-nsL2.c_ll,2)),", (",with(c_ll$nsL2, (conf.int[1] - estimate)/(qt(.05/2, df=parameter))),")\n",sep="")
+	with(gres, print(t.test(nsL2.c_ll,s.c_ll,paired=T)$p.value < 0.05))
 	#cat("SE: O=",sd(gres$o.c_ll)/sqrt(Ngood),", S=",sd(gres$s.c_ll)/sqrt(Ngood),", NS L1=",sd(gres$nsL1.c_ll)/sqrt(Ngood),", NS L2=",sd(gres$nsL2.c_ll)/sqrt(Ngood),"\n",sep="")
-	#print(t.test(gres$ns.c_ll,gres$s.c_ll,paired=T))
 
 	cat("==============\n")
 	cat("frob:\n")
 	with(gres, cat("S = ",mean(s.frob),",",mean(s.frob)/mean(s.frob),"\n",sep=""))
 	with(gres, cat("NS L1 = ",mean(nsL1.frob),", ",mean(nsL1.frob)/mean(s.frob),"\n",sep=""))
+	with(gres, print(t.test(nsL1.frob,s.frob,paired=T)$p.value < 0.05))
 	with(gres, cat("NS L2 = ",mean(nsL2.frob),", ",mean(nsL2.frob)/mean(s.frob),"\n",sep=""))
+	with(gres, print(t.test(nsL2.frob,s.frob,paired=T)$p.value < 0.05))
 
 	cat("==============\n")
 	cat("rmse b0:\n")
@@ -118,7 +121,9 @@ for (i in 2:2) {
 	with(gres, cat("O = ",round(sqrt(mean(o.mse)),3),"\n",sep=""))
 	with(gres, cat("S = ",round(sqrt(mean(s.mse)),3),", ",round(sqrt(mean(s.mse)/mean(o.mse)),3),"\n",sep=""))
 	with(gres, cat("NS L1 = ",round(sqrt(mean(nsL1.mse)),3),", ",round(sqrt(mean(nsL1.mse)/mean(o.mse)),3),"\n",sep=""))
+	with(gres, print(t.test(nsL1.mse,s.mse,paired=T)$p.value < 0.05))
 	with(gres, cat("NS L2 = ",round(sqrt(mean(nsL2.mse)),3),", ",round(sqrt(mean(nsL2.mse)/mean(o.mse)),3),"\n",sep=""))
+	with(gres, print(t.test(nsL2.mse,s.mse,paired=T)$p.value < 0.05))
 
 	cat("==============\n")
 	cat("cov prediction:\n")
