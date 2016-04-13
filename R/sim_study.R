@@ -35,11 +35,31 @@ source("R/fit_cv.R")
 	exp.start <- ((which.part-1)*exp.step+1)
 	exp.end   <- exp.start+exp.step-1
 
+	# create running mean and variance matrix over S
+	o.rmean.n <- rep(0, nrow(design$S))
+	o.rmean.m <- rep(0, nrow(design$S))
+	s.rmean.n <- rep(0, nrow(design$S))
+	s.rmean.m <- rep(0, nrow(design$S))
+	nsL1.rmean.n <- rep(0, nrow(design$S))
+	nsL1.rmean.m <- rep(0, nrow(design$S))
+	nsL2.rmean.n <- rep(0, nrow(design$S))
+	nsL2.rmean.m <- rep(0, nrow(design$S))
+
+	o.psd     <- 0
+	s.psd     <- 0
+	nsL1.psd  <- 0
+	nsL2.psd  <- 0
+
+	crep <- 0
+
 	#res <- mclapply(1:design$Nreps, function(i) {
 	#res <- mclapply(exp.start:exp.end, function(i) {
 	res <- lapply(exp.start:exp.end, function(i) {
+	#res <- lapply(1:1, function(i) {
 		seed <- 1983 + i + design$Nreps*(which.exp-1)
     set.seed(seed)  # set a seed for reproducibility
+
+		crep <<- crep+1
 
 		# generate data
 		data <- generate_data(design, factors)
@@ -56,6 +76,41 @@ source("R/fit_cv.R")
 				s.b0=b0, s.b1=b1, s.b0.cov=b0.cov, s.b1.cov=b1.cov, s.b0.clen=b0.clen, s.b1.clen=b1.clen,
 				s.mse.tau=mse.tau, s.mse.sigma=mse.sigma, s.mse.phi=mse.phi, s.frob=frob, s.c_ll=c_ll, s.mse=mse, s.cov=cov, s.clen=clen))
 
+			# ... kernel-convolutions
+			#res.kc <- eval.kc(design, factors, data)
+
+			# compute running means of MSE at each location
+			diffs2 <- rowMeans(res.o$diffs2)
+			is.no <- o.rmean.n[data$which.test] == 0
+			if (sum(is.no) > 0) o.rmean.m[data$which.test][is.no] <<- diffs2[is.no] # initialize these
+			if (sum(!is.no) > 0) { # update these
+				prev <- o.rmean.m[data$which.test][!is.no]
+				o.rmean.m[data$which.test][!is.no] <<- prev + (prev - diffs2[!is.no]) / crep
+			}
+			o.rmean.n[data$which.test] <<- o.rmean.n[data$which.test]+1
+
+			diffs2 <- rowMeans(res.s$diffs2)
+			is.no <- s.rmean.n[data$which.test] == 0
+			if (sum(is.no) > 0) s.rmean.m[data$which.test][is.no] <<- diffs2[is.no] # initialize these
+			if (sum(!is.no) > 0) { # update these
+				prev <- s.rmean.m[data$which.test][!is.no]
+				s.rmean.m[data$which.test][!is.no] <<- prev + (prev - diffs2[!is.no]) / crep
+			}
+			s.rmean.n[data$which.test] <<- s.rmean.n[data$which.test]+1
+
+			# compute running means of prediction SD
+			if (crep == 1) {
+				o.psd    <<- mean(res.o$preds$sd)
+				s.psd    <<- mean(res.s$preds$sd)
+			} else {
+				o.psd    <<- o.psd    + (o.psd    - mean(res.o$preds$sd))   /crep
+				s.psd    <<- s.psd    + (s.psd    - mean(res.s$preds$sd))   /crep
+			}
+
+if (FALSE) {
+	r <- c(list(seed=seed, n=factors$n), oret, sret) #, nsL1ret, nsL2ret)
+	return(r);
+} else {
 			# ... non-stationary
 			#res.ns <- eval.ns(design, factors, data, res.s$phi)
 			res.nsL1 <- eval.ns(design, factors, data, mean(data$tau), mean(data$sigma), mean(data$phi), fuse=TRUE)
@@ -70,8 +125,33 @@ source("R/fit_cv.R")
 				nsL2.mse.tau=mse.tau, nsL2.mse.sigma=mse.sigma, nsL2.mse.phi=mse.phi, nsL2.frob=frob, nsL2.c_ll=c_ll, nsL2.mse=mse, nsL2.cov=cov, nsL2.clen=clen,
 				nsL2.lambda.tau=lambda.tau, nsL2.lambda.sigma=lambda.sigma, nsL2.lambda.phi=lambda.phi ))
 
-			# ... kernel-convolutions
-			#res.kc <- eval.kc(design, factors, data)
+			diffs2 <- rowMeans(res.nsL1$diffs2)
+			is.no <- o.rmean.n[data$which.test] == 0
+			if (sum(is.no) > 0) nsL1.rmean.m[data$which.test][is.no] <<- diffs2[is.no] # initialize these
+			if (sum(!is.no) > 0) { # update these
+				prev <- nsL1.rmean.m[data$which.test][!is.no]
+				nsL1.rmean.m[data$which.test][!is.no] <<- prev + (prev - diffs2[!is.no]) / crep
+			}
+			nsL1.rmean.n[data$which.test] <<- nsL1.rmean.n[data$which.test]+1
+
+			diffs2 <- rowMeans(res.nsL2$diffs2)
+			is.no <- nsL2.rmean.n[data$which.test] == 0
+			if (sum(is.no) > 0) nsL2.rmean.m[data$which.test][is.no] <<- diffs2[is.no] # initialize these
+			if (sum(!is.no) > 0) { # update these
+				prev <- nsL2.rmean.m[data$which.test][!is.no]
+				nsL2.rmean.m[data$which.test][!is.no] <<- prev + (prev - diffs2[!is.no]) / crep
+			}
+			nsL2.rmean.n[data$which.test] <<- nsL2.rmean.n[data$which.test]+1
+
+			# compute running means of prediction SD
+			if (crep == 1) {
+				nsL1.psd <<- mean(res.nsL1$preds$sd)
+				nsL2.psd <<- mean(res.nsL2$preds$sd)
+			} else {
+				nsL1.psd <<- nsL1.psd + (nsL1.psd - mean(res.nsL1$preds$sd))/crep
+				nsL2.psd <<- nsL2.psd + (nsL2.psd - mean(res.nsL2$preds$sd))/crep
+			}
+}
 
 		# return results
 		r <- c(list(seed=seed, n=factors$n), oret, sret, nsL1ret, nsL2ret)
@@ -98,7 +178,12 @@ print(round(unlist(r),3))
 	res.df <- as.data.frame(do.call("rbind",res))
 	for (i in 1:ncol(res.df)) { res.df[,i] <- unlist(res.df[,i]) }   # unlist the columns
 
-	res.df
+	list(res=res.df,
+		o.rmean.n=o.rmean.n, o.rmean.m=o.rmean.m, o.psd=o.psd,
+		s.rmean.n=s.rmean.n, s.rmean.m=s.rmean.m, s.psd=s.psd,
+		nsL1.rmean.n=nsL1.rmean.n, nsL1.rmean.m=nsL1.rmean.m, nsL1.psd=nsL1.psd,
+		nsL2.rmean.n=nsL2.rmean.n, nsL2.rmean.m=nsL2.rmean.m, nsL2.psd=nsL2.psd
+	)
 }
 
 # generate training, and test data sets
@@ -315,7 +400,7 @@ print(round(unlist(r),3))
 	list(
 		success=TRUE, elapsed=as.vector(elapsed[3]),
 		b0=b0, b1=b1, b0.cov=b.cov[1], b1.cov=b.cov[2], b0.clen=b.clen[1], b1.clen=b.clen[2],
-		c_ll=as.vector(c_ll), mse=as.vector(mse), cov=cov, clen=clen,
+		c_ll=as.vector(c_ll), mse=as.vector(mse), cov=cov, clen=clen, preds=preds, diffs2=diffs2,
 		tau=NA, sigma=NA, phi=NA
 	)
 }
@@ -427,7 +512,7 @@ print(round(unlist(r),3))
 		success=success, elapsed=as.vector(elapsed[3]),
 		b0=b0, b1=b1, b0.cov=b.cov[1], b1.cov=b.cov[2], b0.clen=b.clen[1], b1.clen=b.clen[2],
 		mse.tau=mse.tau, mse.sigma=mse.sigma, mse.phi=mse.phi, frob=frob,
-		c_ll=as.vector(c_ll), mse=as.vector(mse), cov=cov, clen=clen,
+		c_ll=as.vector(c_ll), mse=as.vector(mse), cov=cov, clen=clen, preds=preds, diffs2=diffs2,
 		tau=tau, sigma=sigma, phi=phi
 	)
 }
@@ -706,7 +791,7 @@ print(best.c_ll)
 		success=success, elapsed=as.vector(elapsed[3]),
 		b0=b0, b1=b1, b0.cov=b.cov[1], b1.cov=b.cov[2], b0.clen=b.clen[1], b1.clen=b.clen[2],
 		mse.tau=mse.tau, mse.sigma=mse.sigma, mse.phi=mse.phi, frob=frob,
-		c_ll=as.vector(c_ll), mse=as.vector(mse), cov=cov, clen=clen,
+		c_ll=as.vector(c_ll), mse=as.vector(mse), cov=cov, clen=clen, preds=preds, diffs2=diffs2,
 		lambda.tau=lambda.tau, lambda.sigma=lambda.sigma, lambda.phi=lambda.phi,
 		tau=tau, sigma=sigma, phi=phi
 	)
@@ -746,6 +831,7 @@ sim.factors <- expand.grid(
 	#n=40^2, nt=600
 	#n=50^2, nt=500
 
+	#n=23^2, nt=100  # QUICK
 	n=55^2, nt=500  # STUDY
 )
 
